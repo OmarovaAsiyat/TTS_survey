@@ -416,7 +416,181 @@ const trialInstructions = {
   button_label_next:     'Далее →',
   button_label_previous: '← Назад',
 };
+// ================================================================
+// БЛОК 6. ТРЕНИРОВОЧНЫЙ БЛОК
+// ================================================================
 
+// Три тренировочных стимула: плохой, средний, хороший
+// URL замени на реальные ссылки из audio_urls.csv после проверки
+const PRACTICE_STIMULI = [
+  {
+    url:     'https://drive.google.com/uc?id=ВСТАВЬ_ID_ПЛОХОГО&export=download',
+    label:   'Запись 1 из 3',
+    quality: 'bad',
+  },
+  {
+    url:     'https://drive.google.com/uc?id=ВСТАВЬ_ID_СРЕДНЕГО&export=download',
+    label:   'Запись 2 из 3',
+    quality: 'medium',
+  },
+  {
+    url:     'https://drive.google.com/uc?id=ВСТАВЬ_ID_ХОРОШЕГО&export=download',
+    label:   'Запись 3 из 3',
+    quality: 'good',
+  },
+];
+
+// Вводный экран тренировки
+const trialPracticeIntro = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div style="text-align:center;padding:20px 0">
+      <h2>Тренировочный блок</h2>
+      <p>Сейчас вы прослушаете три записи, чтобы привыкнуть
+         к формату оценки.</p>
+      <p>Записи намеренно различаются по качеству —
+         от плохого до хорошего. Это поможет вам
+         откалибровать свои оценки.</p>
+      <p style="color:var(--muted);font-size:.9rem">
+        Эти оценки <strong>не войдут</strong>
+        в результаты исследования.
+      </p>
+    </div>`,
+  choices: ['Начать тренировку →'],
+};
+
+// Функция строит три тренировочных пробы
+function buildPracticeTrials() {
+  return PRACTICE_STIMULI.map((stim, idx) => ({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: function () {
+      return `
+        <div style="background:var(--acc-l);border:1px solid var(--border);
+                    border-radius:var(--r);padding:14px 18px;margin-bottom:20px;
+                    display:flex;align-items:center;gap:12px">
+          <span style="font-family:var(--mono);font-size:.8rem;
+                       color:var(--accent);white-space:nowrap">
+            ТРЕНИРОВКА · ${stim.label}
+          </span>
+          <audio id="practice-audio-${idx}" preload="auto"
+                 style="flex:1;height:34px">
+            <source src="${stim.url}" type="audio/wav">
+          </audio>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--border);
+                    border-radius:var(--r);padding:18px 20px;margin-bottom:14px">
+          <p style="font-weight:600;margin-bottom:16px">
+            Оцените естественность речи:
+          </p>
+          <div style="display:flex;align-items:center;
+                      justify-content:center;gap:6px;flex-wrap:wrap">
+            <span style="font-size:.78rem;color:var(--muted);
+                         max-width:80px;text-align:center;line-height:1.3">
+              Очень<br>неестественно
+            </span>
+            ${[1,2,3,4,5].map(n => `
+              <label id="practice-label-${idx}-${n}"
+                     style="display:flex;flex-direction:column;
+                            align-items:center;gap:4px;cursor:pointer">
+                <span style="font-family:var(--mono);font-size:.85rem;
+                             color:var(--muted)">${n}</span>
+                <input type="radio" name="practice_mos_${idx}"
+                       value="${n}"
+                       style="width:18px;height:18px;
+                              accent-color:var(--accent)">
+              </label>`).join('')}
+            <span style="font-size:.78rem;color:var(--muted);
+                         max-width:80px;text-align:center;line-height:1.3">
+              Очень<br>естественно
+            </span>
+          </div>
+        </div>
+
+        <p style="font-size:.82rem;color:var(--muted);text-align:center"
+           id="practice-play-hint-${idx}">
+          Прослушайте запись перед оценкой.
+          Доступно прослушиваний: <strong id="practice-count-${idx}">2</strong>
+        </p>`;
+    },
+
+    choices: ['Далее →'],
+
+    // Кнопка «Далее» заблокирована пока нет оценки и прослушивания
+    on_load: function () {
+      const btn      = document.querySelector('.jspsych-btn');
+      const audioEl  = document.getElementById(`practice-audio-${idx}`);
+      const countEl  = document.getElementById(`practice-count-${idx}`);
+      const hintEl   = document.getElementById(`practice-play-hint-${idx}`);
+
+      let playsLeft   = 2;
+      let hasPlayed   = false;
+      let hasRated    = false;
+
+      // Блокируем кнопку изначально
+      btn.disabled = true;
+      btn.style.opacity = '0.4';
+      btn.style.cursor  = 'not-allowed';
+
+      function tryUnlock() {
+        if (hasPlayed && hasRated) {
+          btn.disabled      = false;
+          btn.style.opacity = '1';
+          btn.style.cursor  = 'pointer';
+        }
+      }
+
+      // Счётчик прослушиваний
+      audioEl.addEventListener('play', function () {
+        if (playsLeft > 0) {
+          playsLeft--;
+          hasPlayed = true;
+          countEl.textContent = playsLeft;
+          if (playsLeft === 0) {
+            audioEl.controls = false;
+            hintEl.innerHTML =
+              'Лимит прослушиваний исчерпан.';
+          }
+          tryUnlock();
+        }
+      });
+
+      // Разблокировка после оценки
+      document.querySelectorAll(
+        `input[name="practice_mos_${idx}"]`
+      ).forEach(radio => {
+        radio.addEventListener('change', function () {
+          hasRated = true;
+          tryUnlock();
+        });
+      });
+    },
+
+    on_finish: function (data) {
+      const sel = document.querySelector(
+        `input[name="practice_mos_${idx}"]:checked`
+      );
+      data.practice_mos   = sel ? parseInt(sel.value) : null;
+      data.practice_index = idx;
+      data.is_practice    = true;
+    },
+  }));
+}
+
+// Экран после тренировки
+const trialPracticeDone = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div style="text-align:center;padding:30px 0">
+      <h2>Тренировка завершена</h2>
+      <p>Теперь начнётся основной блок.</p>
+      <p style="color:var(--muted);font-size:.9rem;margin-top:8px">
+        Оценивайте каждую запись независимо,
+        по первому впечатлению.
+      </p>
+    </div>`,
+  choices: ['Начать основной блок →'],
+};
 // ================================================================
 // ЛОГИКА ПОСЛЕ СКРИНИНГА
 // ================================================================
@@ -428,22 +602,12 @@ function buildTimeline() {
     return;
   }
 
-  // Следующие блоки добавим на следующих шагах
-  jsPsych.run([
+jsPsych.run([
     trialInstructions,
-    {
-      type: jsPsychHtmlButtonResponse,
-      stimulus: `
-        <div style="text-align:center;padding:40px 0">
-          <h2>Инструкция пройдена</h2>
-          <p style="color:var(--muted)">
-            Тренировочный блок появится на следующем шаге.
-          </p>
-        </div>`,
-      choices: [],
-    }
+    trialPracticeIntro,
+    ...buildPracticeTrials(),
+    trialPracticeDone,
   ]);
-}
 
 // ================================================================
 // ЗАПУСК
