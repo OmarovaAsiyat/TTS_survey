@@ -221,11 +221,151 @@ const trialAssigned = {
        не сохранится:( </p>`,
   choices: ['Начать →'],
 };
+// ── Скрининг ──────────────────────────────────────────────────────
+const trialScreening = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <h2>Несколько вопросов перед началом</h2>
+
+    <div style="background:var(--surface);border:1px solid var(--border);
+                border-radius:var(--r);padding:20px;margin:16px 0">
+
+      <p style="font-weight:600;margin-bottom:6px">
+        Является ли русский язык вашим родным (первым) языком?
+      </p>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="native" value="yes" required> Да
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="native" value="no"> Нет
+        </label>
+      </div>
+
+      <p style="font-weight:600;margin-bottom:6px">
+        Есть ли у вас нарушения слуха?
+      </p>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="hearing" value="no" required> Нет
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="hearing" value="yes"> Да
+        </label>
+      </div>
+
+      <p style="font-weight:600;margin-bottom:6px">
+        Что вы используете для прослушивания?
+      </p>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="device" value="headphones" required>
+          Наушники
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="device" value="speakers">
+          Внешние колонки
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="device" value="laptop">
+          Встроенные динамики ноутбука или телефона
+        </label>
+      </div>
+
+      <p style="font-weight:600;margin-bottom:6px">Ваш возраст</p>
+      <input type="number" name="age" min="16" max="99"
+             placeholder="Например, 23"
+             style="font-family:var(--mono);font-size:.95rem;
+                    padding:7px 10px;border:1px solid var(--border);
+                    border-radius:var(--r);width:120px;margin-bottom:20px">
+
+      <p style="font-weight:600;margin-bottom:6px">
+        Есть ли у вас профессиональный опыт работы со звуком или речью?
+        <span style="font-weight:400;color:var(--muted)">(лингвист, звукорежиссёр, логопед и т.п.)</span>
+      </p>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="expert" value="no" required> Нет
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="expert" value="yes"> Да
+        </label>
+      </div>
+    </div>`,
+
+  choices: ['Продолжить →'],
+
+  on_finish: function (data) {
+    // Собираем ответы из формы
+    const form = document.querySelector('.jspsych-content');
+    const get  = (name) => {
+      const el = form ? form.querySelector(`[name="${name}"]:checked`) : null;
+      return el ? el.value : null;
+    };
+    const age = form ? form.querySelector('[name="age"]') : null;
+
+    SESSION.screening = {
+      native:  get('native'),
+      hearing: get('hearing'),
+      device:  get('device'),
+      age:     age ? age.value : null,
+      expert:  get('expert'),
+    };
+  },
+};
+
+// ── Экран отсева (показывается если не прошёл скрининг) ───────────
+const trialDisqualified = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div style="text-align:center;padding:40px 0">
+      <h2>Спасибо за интерес</h2>
+      <p>К сожалению, вы не подходите под критерии участия
+         в этом исследовании.</p>
+      <p style="color:var(--muted);margin-top:12px">
+        Для участия необходимо: быть носителем русского языка
+        и не иметь нарушений слуха.
+      </p>
+    </div>`,
+  choices: [],  // кнопок нет — сессия завершена
+};
+
+// ── Логика после скрининга ────────────────────────────────────────
+function buildTimeline() {
+  const s = SESSION.screening;
+
+  // Критерии отсева из ВКР: не носитель русского или нарушения слуха
+  if (s.native === 'no' || s.hearing === 'yes') {
+    jsPsych.run([trialDisqualified]);
+    return;
+  }
+
+  // Если прошёл — запускаем остальные блоки
+  // (инструкция, тренировка, MOS — добавим на следующих шагах)
+  jsPsych.run([
+    // placeholder: следующие блоки будут здесь
+    {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `
+        <div style="text-align:center;padding:40px 0">
+          <h2>Скрининг пройден</h2>
+          <p style="color:var(--muted)">
+            Следующий блок появится на следующем шаге разработки.
+          </p>
+        </div>`,
+      choices: [],
+    }
+  ]);
+}
+
 // ── Запуск ────────────────────────────────────────────────────────
 jsPsych.run([
   trialLoading,
   trialAssigned,
-]);
+  trialScreening,
+], {
+  on_finish: buildTimeline,
+});
 </script>
 </body>
 </html>
