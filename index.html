@@ -71,15 +71,11 @@
     }
     .jspsych-btn:hover { opacity: .87; }
 
-    .loading-box {
-      text-align: center;
-      padding: 60px 20px;
-    }
+    .loading-box { text-align: center; padding: 60px 20px; }
     .loading-box p { color: var(--muted); font-size: .95rem; }
 
     .spinner {
-      width: 36px;
-      height: 36px;
+      width: 36px; height: 36px;
       border: 3px solid var(--border);
       border-top-color: var(--accent);
       border-radius: 50%;
@@ -88,10 +84,7 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .full-box {
-      text-align: center;
-      padding: 60px 20px;
-    }
+    .full-box { text-align: center; padding: 60px 20px; }
     .full-box h2 { font-size: 1.5rem; margin-bottom: 12px; }
     .full-box p  { color: var(--muted); }
   </style>
@@ -167,7 +160,8 @@ const trialLoading = {
             <h2>Набор участников завершён</h2>
             <p>Спасибо за интерес к исследованию.<br>
                Все места уже заняты, но мы рады каждому
-               участнику — следите за нашими следующими исследованиями.</p>
+               участнику — следите за нашими следующими
+               исследованиями.</p>
           </div>`;
         return;
       }
@@ -296,7 +290,6 @@ const trialScreening = {
       return el ? el.value : null;
     };
     const age = form ? form.querySelector('[name="age"]') : null;
-
     SESSION.screening = {
       native:  get('native'),
       hearing: get('hearing'),
@@ -341,7 +334,8 @@ const trialInstructions = {
         колонки в тихом помещении.</p>`,
 
     `<h2>Как оценивать</h2>
-     <p>Для каждой записи вы выставите оценку по пятибалльной шкале:</p>
+     <p>Для каждой записи вы выставите оценку
+        по пятибалльной шкале:</p>
      <div style="background:var(--surface);border:1px solid var(--border);
                  border-radius:var(--r);padding:20px;margin:16px 0">
        <div style="display:grid;grid-template-columns:auto 1fr;
@@ -350,22 +344,18 @@ const trialInstructions = {
                       color:var(--accent);font-weight:600">5</span>
          <span><strong>Очень естественно</strong> —
                практически как живая речь</span>
-
          <span style="font-family:var(--mono);font-size:1.1rem;
                       color:var(--accent);font-weight:600">4</span>
          <span><strong>Естественно</strong> —
                звучит хорошо, мелкие огрехи не мешают</span>
-
          <span style="font-family:var(--mono);font-size:1.1rem;
                       color:var(--accent);font-weight:600">3</span>
          <span><strong>Нейтрально</strong> —
                есть недостатки, но терпимо</span>
-
          <span style="font-family:var(--mono);font-size:1.1rem;
                       color:var(--accent);font-weight:600">2</span>
          <span><strong>Неестественно</strong> —
                заметные проблемы, мешающие восприятию</span>
-
          <span style="font-family:var(--mono);font-size:1.1rem;
                       color:var(--accent);font-weight:600">1</span>
          <span><strong>Очень неестественно</strong> —
@@ -379,7 +369,6 @@ const trialInstructions = {
      <div style="background:var(--surface);border:1px solid var(--border);
                  border-radius:var(--r);padding:20px;margin:16px 0;
                  display:flex;flex-direction:column;gap:14px">
-
        <div style="display:flex;gap:12px;align-items:flex-start">
          <span style="font-size:1.3rem">🎧</span>
          <span>Каждую запись можно прослушать
@@ -387,21 +376,18 @@ const trialInstructions = {
                После второго воспроизведения кнопка
                плеера заблокируется.</span>
        </div>
-
        <div style="display:flex;gap:12px;align-items:flex-start">
          <span style="font-size:1.3rem">⏭️</span>
          <span>Кнопка <strong>«Далее»</strong> становится
                активной только после того, как вы прослушали
                запись и выставили оценку.</span>
        </div>
-
        <div style="display:flex;gap:12px;align-items:flex-start">
          <span style="font-size:1.3rem">💬</span>
          <span>Для некоторых записей появится
                <strong>дополнительный вопрос</strong> —
                отвечайте по первому впечатлению.</span>
        </div>
-
        <div style="display:flex;gap:12px;align-items:flex-start">
          <span style="font-size:1.3rem">🔄</span>
          <span>Не обновляйте страницу — прогресс не сохраняется
@@ -416,12 +402,10 @@ const trialInstructions = {
   button_label_next:     'Далее →',
   button_label_previous: '← Назад',
 };
+
 // ================================================================
 // БЛОК 6. ТРЕНИРОВОЧНЫЙ БЛОК
 // ================================================================
-
-// Три тренировочных стимула: плохой, средний, хороший
-// URL замени на реальные ссылки из audio_urls.csv после проверки
 const PRACTICE_STIMULI = [
   {
     url:     'https://drive.google.com/uc?id=ВСТАВЬ_ID_ПЛОХОГО&export=download',
@@ -440,7 +424,6 @@ const PRACTICE_STIMULI = [
   },
 ];
 
-// Вводный экран тренировки
 const trialPracticeIntro = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
@@ -459,7 +442,6 @@ const trialPracticeIntro = {
   choices: ['Начать тренировку →'],
 };
 
-// Функция строит три тренировочных пробы
 function buildPracticeTrials() {
   return PRACTICE_STIMULI.map((stim, idx) => ({
     type: jsPsychHtmlButtonResponse,
@@ -472,12 +454,11 @@ function buildPracticeTrials() {
                        color:var(--accent);white-space:nowrap">
             ТРЕНИРОВКА · ${stim.label}
           </span>
-          <audio id="practice-audio-${idx}" preload="auto"
+          <audio id="practice-audio-${idx}" controls preload="auto"
                  style="flex:1;height:34px">
             <source src="${stim.url}" type="audio/wav">
           </audio>
         </div>
-
         <div style="background:var(--surface);border:1px solid var(--border);
                     border-radius:var(--r);padding:18px 20px;margin-bottom:14px">
           <p style="font-weight:600;margin-bottom:16px">
@@ -490,8 +471,7 @@ function buildPracticeTrials() {
               Очень<br>неестественно
             </span>
             ${[1,2,3,4,5].map(n => `
-              <label id="practice-label-${idx}-${n}"
-                     style="display:flex;flex-direction:column;
+              <label style="display:flex;flex-direction:column;
                             align-items:center;gap:4px;cursor:pointer">
                 <span style="font-family:var(--mono);font-size:.85rem;
                              color:var(--muted)">${n}</span>
@@ -506,29 +486,27 @@ function buildPracticeTrials() {
             </span>
           </div>
         </div>
-
         <p style="font-size:.82rem;color:var(--muted);text-align:center"
-           id="practice-play-hint-${idx}">
+           id="practice-hint-${idx}">
           Прослушайте запись перед оценкой.
-          Доступно прослушиваний: <strong id="practice-count-${idx}">2</strong>
+          Доступно прослушиваний:
+          <strong id="practice-count-${idx}">2</strong>
         </p>`;
     },
 
     choices: ['Далее →'],
 
-    // Кнопка «Далее» заблокирована пока нет оценки и прослушивания
     on_load: function () {
-      const btn      = document.querySelector('.jspsych-btn');
-      const audioEl  = document.getElementById(`practice-audio-${idx}`);
-      const countEl  = document.getElementById(`practice-count-${idx}`);
-      const hintEl   = document.getElementById(`practice-play-hint-${idx}`);
+      const btn     = document.querySelector('.jspsych-btn');
+      const audio   = document.getElementById(`practice-audio-${idx}`);
+      const countEl = document.getElementById(`practice-count-${idx}`);
+      const hintEl  = document.getElementById(`practice-hint-${idx}`);
 
-      let playsLeft   = 2;
-      let hasPlayed   = false;
-      let hasRated    = false;
+      let playsLeft = 2;
+      let hasPlayed = false;
+      let hasRated  = false;
 
-      // Блокируем кнопку изначально
-      btn.disabled = true;
+      btn.disabled      = true;
       btn.style.opacity = '0.4';
       btn.style.cursor  = 'not-allowed';
 
@@ -540,26 +518,23 @@ function buildPracticeTrials() {
         }
       }
 
-      // Счётчик прослушиваний
-      audioEl.addEventListener('play', function () {
+      audio.addEventListener('play', function () {
         if (playsLeft > 0) {
           playsLeft--;
           hasPlayed = true;
           countEl.textContent = playsLeft;
           if (playsLeft === 0) {
-            audioEl.controls = false;
-            hintEl.innerHTML =
-              'Лимит прослушиваний исчерпан.';
+            audio.controls = false;
+            hintEl.innerHTML = 'Лимит прослушиваний исчерпан.';
           }
           tryUnlock();
         }
       });
 
-      // Разблокировка после оценки
       document.querySelectorAll(
         `input[name="practice_mos_${idx}"]`
-      ).forEach(radio => {
-        radio.addEventListener('change', function () {
+      ).forEach(r => {
+        r.addEventListener('change', function () {
           hasRated = true;
           tryUnlock();
         });
@@ -577,7 +552,6 @@ function buildPracticeTrials() {
   }));
 }
 
-// Экран после тренировки
 const trialPracticeDone = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
@@ -591,6 +565,7 @@ const trialPracticeDone = {
     </div>`,
   choices: ['Начать основной блок →'],
 };
+
 // ================================================================
 // ЛОГИКА ПОСЛЕ СКРИНИНГА
 // ================================================================
@@ -602,12 +577,13 @@ function buildTimeline() {
     return;
   }
 
-jsPsych.run([
+  jsPsych.run([
     trialInstructions,
     trialPracticeIntro,
     ...buildPracticeTrials(),
     trialPracticeDone,
   ]);
+}
 
 // ================================================================
 // ЗАПУСК
