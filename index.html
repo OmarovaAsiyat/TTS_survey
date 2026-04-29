@@ -7,6 +7,7 @@
 
   <script src="https://unpkg.com/jspsych@7.3.4"></script>
   <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.3"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-instructions@1.1.4"></script>
   <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap"
@@ -87,28 +88,6 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .pid-badge {
-      display: inline-block;
-      font-family: var(--mono);
-      font-size: .95rem;
-      background: var(--acc-l);
-      border: 1px solid var(--accent);
-      border-radius: 4px;
-      padding: 4px 12px;
-      margin: 8px 0 16px;
-      color: var(--accent);
-    }
-
-    .warn-box {
-      background: #fff8e1;
-      border: 1px solid #f0c040;
-      border-radius: var(--r);
-      padding: 14px 18px;
-      margin: 14px 0;
-      font-size: .9rem;
-      color: #5a4a00;
-    }
-
     .full-box {
       text-align: center;
       padding: 60px 20px;
@@ -121,17 +100,25 @@
 <div id="jspsych-target"></div>
 
 <script>
-//
+// ================================================================
+// КОНФИГУРАЦИЯ
+// ================================================================
 const GAS_URL  = 'https://script.google.com/macros/s/AKfycbxQ04SXN7KwFAFBt-bJcUyruT2fuTRqwyIkoY9WLUvJ_qiuSRHaesJyjl3zazstniaw7g/exec';
 const BIBD_URL = './bibd_assignments.json';
-//
 
+// ================================================================
+// ГЛОБАЛЬНОЕ СОСТОЯНИЕ СЕССИИ
+// ================================================================
 const SESSION = {
   participant_id: null,
   survey_set:     null,
   stimuli:        [],
+  screening:      {},
 };
 
+// ================================================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ================================================================
 async function fetchJSON(url) {
   const r = await fetch(url);
   if (!r.ok) throw new Error('Не удалось загрузить файл: ' + url);
@@ -146,13 +133,18 @@ function pidToSetNumber(pid) {
   return parseInt(pid.replace('P', ''), 10);
 }
 
+// ================================================================
+// ИНИЦИАЛИЗАЦИЯ jsPsych
+// ================================================================
 const jsPsych = initJsPsych({
   display_element:          'jspsych-target',
   show_progress_bar:        true,
   auto_update_progress_bar: true,
 });
 
-// ── Экран загрузки ────────────────────────────────────────────────
+// ================================================================
+// БЛОК 1. ЗАГРУЗКА И НАЗНАЧЕНИЕ УЧАСТНИКА
+// ================================================================
 const trialLoading = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
@@ -167,7 +159,6 @@ const trialLoading = {
 
   on_load: async function () {
     try {
-      // Шаг 1: назначаем участника
       const assignResult = await gasGet('assign');
 
       if (assignResult.status === 'full') {
@@ -175,7 +166,8 @@ const trialLoading = {
           <div class="full-box">
             <h2>Набор участников завершён</h2>
             <p>Спасибо за интерес к исследованию.<br>
-               К сожалению, все места уже заняты.</p>
+               Все места уже заняты, но мы рады каждому
+               участнику — следите за нашими следующими исследованиями.</p>
           </div>`;
         return;
       }
@@ -183,17 +175,12 @@ const trialLoading = {
       SESSION.participant_id = assignResult.participant_id;
       SESSION.survey_set     = pidToSetNumber(SESSION.participant_id);
 
-      // Шаг 2: загружаем BIBD и достаём стимулы этого участника
-      const bibd      = await fetchJSON(BIBD_URL);
-      const key       = SESSION.participant_id;
-
-      if (!bibd[key]) {
-        throw new Error('Набор для ' + key + ' не найден в BIBD');
+      const bibd = await fetchJSON(BIBD_URL);
+      if (!bibd[SESSION.participant_id]) {
+        throw new Error('Набор для ' + SESSION.participant_id + ' не найден');
       }
+      SESSION.stimuli = bibd[SESSION.participant_id];
 
-      SESSION.stimuli = bibd[key];
-
-      // Шаг 3: переходим дальше
       jsPsych.finishTrial();
 
     } catch (err) {
@@ -211,17 +198,22 @@ const trialLoading = {
   },
 };
 
-// ── Экран подтверждения ───────────────────────────────────────────
+// ================================================================
+// БЛОК 2. ЭКРАН ПОДТВЕРЖДЕНИЯ
+// ================================================================
 const trialAssigned = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
-    <h2>Всё готово!</h2>
+    <h2>Всё готово</h2>
     <p>Пожалуйста, не обновляйте страницу и не закрывайте
-       эту вкладку до завершения опроса, иначе прогресс
-       не сохранится:( </p>`,
+       эту вкладку до завершения опроса — иначе прогресс
+       не сохранится.</p>`,
   choices: ['Начать →'],
 };
-// ── Скрининг ──────────────────────────────────────────────────────
+
+// ================================================================
+// БЛОК 3. СКРИНИНГ
+// ================================================================
 const trialScreening = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
@@ -235,7 +227,7 @@ const trialScreening = {
       </p>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="native" value="yes" required> Да
+          <input type="radio" name="native" value="yes"> Да
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="radio" name="native" value="no"> Нет
@@ -247,7 +239,7 @@ const trialScreening = {
       </p>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="hearing" value="no" required> Нет
+          <input type="radio" name="hearing" value="no"> Нет
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="radio" name="hearing" value="yes"> Да
@@ -259,7 +251,7 @@ const trialScreening = {
       </p>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="device" value="headphones" required>
+          <input type="radio" name="device" value="headphones">
           Наушники
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -281,11 +273,13 @@ const trialScreening = {
 
       <p style="font-weight:600;margin-bottom:6px">
         Есть ли у вас профессиональный опыт работы со звуком или речью?
-        <span style="font-weight:400;color:var(--muted)">(лингвист, звукорежиссёр, логопед и т.п.)</span>
+        <span style="font-weight:400;color:var(--muted)">
+          (лингвист, звукорежиссёр, логопед и т.п.)
+        </span>
       </p>
       <div style="display:flex;flex-direction:column;gap:6px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="expert" value="no" required> Нет
+          <input type="radio" name="expert" value="no"> Нет
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="radio" name="expert" value="yes"> Да
@@ -295,8 +289,7 @@ const trialScreening = {
 
   choices: ['Продолжить →'],
 
-  on_finish: function (data) {
-    // Собираем ответы из формы
+  on_finish: function () {
     const form = document.querySelector('.jspsych-content');
     const get  = (name) => {
       const el = form ? form.querySelector(`[name="${name}"]:checked`) : null;
@@ -314,7 +307,9 @@ const trialScreening = {
   },
 };
 
-// ── Экран отсева (показывается если не прошёл скрининг) ───────────
+// ================================================================
+// БЛОК 4. ЭКРАН ОТСЕВА
+// ================================================================
 const trialDisqualified = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
@@ -323,34 +318,126 @@ const trialDisqualified = {
       <p>К сожалению, вы не подходите под критерии участия
          в этом исследовании.</p>
       <p style="color:var(--muted);margin-top:12px">
-        Для участия необходимо: быть носителем русского языка
+        Для участия необходимо быть носителем русского языка
         и не иметь нарушений слуха.
       </p>
     </div>`,
-  choices: [],  // кнопок нет — сессия завершена
+  choices: [],
 };
 
-// ── Логика после скрининга ────────────────────────────────────────
+// ================================================================
+// БЛОК 5. ИНСТРУКЦИЯ
+// ================================================================
+const trialInstructions = {
+  type: jsPsychInstructions,
+  pages: [
+    `<h2>Добро пожаловать!</h2>
+     <p>Вы участвуете в исследовании компьютерного синтеза
+        русской речи, которое проводит кафедра фонетики СПбГУ.</p>
+     <p>Вам предстоит прослушать короткие аудиозаписи и оценить
+        их качество. Всего около 35 записей.</p>
+     <p>Время прохождения: <strong>20–25 минут</strong>.<br>
+        Пожалуйста, слушайте в наушниках или через внешние
+        колонки в тихом помещении.</p>`,
+
+    `<h2>Как оценивать</h2>
+     <p>Для каждой записи вы выставите оценку по пятибалльной шкале:</p>
+     <div style="background:var(--surface);border:1px solid var(--border);
+                 border-radius:var(--r);padding:20px;margin:16px 0">
+       <div style="display:grid;grid-template-columns:auto 1fr;
+                   gap:10px 16px;align-items:start">
+         <span style="font-family:var(--mono);font-size:1.1rem;
+                      color:var(--accent);font-weight:600">5</span>
+         <span><strong>Очень естественно</strong> —
+               практически как живая речь</span>
+
+         <span style="font-family:var(--mono);font-size:1.1rem;
+                      color:var(--accent);font-weight:600">4</span>
+         <span><strong>Естественно</strong> —
+               звучит хорошо, мелкие огрехи не мешают</span>
+
+         <span style="font-family:var(--mono);font-size:1.1rem;
+                      color:var(--accent);font-weight:600">3</span>
+         <span><strong>Нейтрально</strong> —
+               есть недостатки, но терпимо</span>
+
+         <span style="font-family:var(--mono);font-size:1.1rem;
+                      color:var(--accent);font-weight:600">2</span>
+         <span><strong>Неестественно</strong> —
+               заметные проблемы, мешающие восприятию</span>
+
+         <span style="font-family:var(--mono);font-size:1.1rem;
+                      color:var(--accent);font-weight:600">1</span>
+         <span><strong>Очень неестественно</strong> —
+               явные ошибки, слушать некомфортно</span>
+       </div>
+     </div>
+     <p>Оценивайте каждую запись <strong>независимо</strong>,
+        не сравнивая с предыдущими.</p>`,
+
+    `<h2>Важные правила</h2>
+     <div style="background:var(--surface);border:1px solid var(--border);
+                 border-radius:var(--r);padding:20px;margin:16px 0;
+                 display:flex;flex-direction:column;gap:14px">
+
+       <div style="display:flex;gap:12px;align-items:flex-start">
+         <span style="font-size:1.3rem">🎧</span>
+         <span>Каждую запись можно прослушать
+               <strong>не более двух раз</strong>.
+               После второго воспроизведения кнопка
+               плеера заблокируется.</span>
+       </div>
+
+       <div style="display:flex;gap:12px;align-items:flex-start">
+         <span style="font-size:1.3rem">⏭️</span>
+         <span>Кнопка <strong>«Далее»</strong> становится
+               активной только после того, как вы прослушали
+               запись и выставили оценку.</span>
+       </div>
+
+       <div style="display:flex;gap:12px;align-items:flex-start">
+         <span style="font-size:1.3rem">💬</span>
+         <span>Для некоторых записей появится
+               <strong>дополнительный вопрос</strong> —
+               отвечайте по первому впечатлению.</span>
+       </div>
+
+       <div style="display:flex;gap:12px;align-items:flex-start">
+         <span style="font-size:1.3rem">🔄</span>
+         <span>Не обновляйте страницу — прогресс не сохраняется
+               между сессиями.</span>
+       </div>
+     </div>
+     <p>Сначала будет <strong>тренировочный блок</strong>
+        из трёх записей — он поможет привыкнуть к формату.
+        Эти оценки не войдут в результаты исследования.</p>`,
+  ],
+  show_clickable_nav: true,
+  button_label_next:     'Далее →',
+  button_label_previous: '← Назад',
+};
+
+// ================================================================
+// ЛОГИКА ПОСЛЕ СКРИНИНГА
+// ================================================================
 function buildTimeline() {
   const s = SESSION.screening;
 
-  // Критерии отсева из ВКР: не носитель русского или нарушения слуха
   if (s.native === 'no' || s.hearing === 'yes') {
     jsPsych.run([trialDisqualified]);
     return;
   }
 
-  // Если прошёл — запускаем остальные блоки
-  // (инструкция, тренировка, MOS — добавим на следующих шагах)
+  // Следующие блоки добавим на следующих шагах
   jsPsych.run([
-    // placeholder: следующие блоки будут здесь
+    trialInstructions,
     {
       type: jsPsychHtmlButtonResponse,
       stimulus: `
         <div style="text-align:center;padding:40px 0">
-          <h2>Скрининг пройден</h2>
+          <h2>Инструкция пройдена</h2>
           <p style="color:var(--muted)">
-            Следующий блок появится на следующем шаге разработки.
+            Тренировочный блок появится на следующем шаге.
           </p>
         </div>`,
       choices: [],
@@ -358,7 +445,9 @@ function buildTimeline() {
   ]);
 }
 
-// ── Запуск ────────────────────────────────────────────────────────
+// ================================================================
+// ЗАПУСК
+// ================================================================
 jsPsych.run([
   trialLoading,
   trialAssigned,
