@@ -106,7 +106,13 @@ const SESSION = {
   participant_id: null,
   survey_set:     null,
   stimuli:        [],
-  screening:      {},
+  screening:      {
+    native:  null,
+    hearing: null,
+    device:  null,
+    age:     null,
+    expert:  null,
+  },
 };
 
 // ================================================================
@@ -221,10 +227,10 @@ const trialScreening = {
       </p>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="native" value="yes"> Да
+          <input type="radio" name="sc_native" value="yes"> Да
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="native" value="no"> Нет
+          <input type="radio" name="sc_native" value="no"> Нет
         </label>
       </div>
 
@@ -233,10 +239,10 @@ const trialScreening = {
       </p>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="hearing" value="no"> Нет
+          <input type="radio" name="sc_hearing" value="no"> Нет
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="hearing" value="yes"> Да
+          <input type="radio" name="sc_hearing" value="yes"> Да
         </label>
       </div>
 
@@ -245,21 +251,21 @@ const trialScreening = {
       </p>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="device" value="headphones">
+          <input type="radio" name="sc_device" value="headphones">
           Наушники
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="device" value="speakers">
+          <input type="radio" name="sc_device" value="speakers">
           Внешние колонки
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="device" value="laptop">
+          <input type="radio" name="sc_device" value="laptop">
           Встроенные динамики ноутбука или телефона
         </label>
       </div>
 
       <p style="font-weight:600;margin-bottom:6px">Ваш возраст</p>
-      <input type="number" name="age" min="16" max="99"
+      <input type="number" name="sc_age" min="16" max="99"
              placeholder="Например, 23"
              style="font-family:var(--mono);font-size:.95rem;
                     padding:7px 10px;border:1px solid var(--border);
@@ -273,30 +279,37 @@ const trialScreening = {
       </p>
       <div style="display:flex;flex-direction:column;gap:6px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="expert" value="no"> Нет
+          <input type="radio" name="sc_expert" value="no"> Нет
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="expert" value="yes"> Да
+          <input type="radio" name="sc_expert" value="yes"> Да
         </label>
       </div>
     </div>`,
 
   choices: ['Продолжить →'],
 
+  on_load: function () {
+    ['sc_native', 'sc_hearing', 'sc_device', 'sc_expert'].forEach(function (name) {
+      document.querySelectorAll('[name="' + name + '"]').forEach(function (el) {
+        el.addEventListener('change', function () {
+          const key = name.replace('sc_', '');
+          SESSION.screening[key] = this.value;
+          console.log('screening update:', key, '=', this.value);
+        });
+      });
+    });
+
+    const ageEl = document.querySelector('[name="sc_age"]');
+    if (ageEl) {
+      ageEl.addEventListener('input', function () {
+        SESSION.screening.age = this.value;
+      });
+    }
+  },
+
   on_finish: function () {
-    const form = document.querySelector('.jspsych-content');
-    const get  = (name) => {
-      const el = form ? form.querySelector(`[name="${name}"]:checked`) : null;
-      return el ? el.value : null;
-    };
-    const age = form ? form.querySelector('[name="age"]') : null;
-    SESSION.screening = {
-      native:  get('native'),
-      hearing: get('hearing'),
-      device:  get('device'),
-      age:     age ? age.value : null,
-      expert:  get('expert'),
-    };
+    console.log('screening on_finish:', JSON.stringify(SESSION.screening));
   },
 };
 
@@ -443,113 +456,115 @@ const trialPracticeIntro = {
 };
 
 function buildPracticeTrials() {
-  return PRACTICE_STIMULI.map((stim, idx) => ({
-    type: jsPsychHtmlButtonResponse,
-    stimulus: function () {
-      return `
-        <div style="background:var(--acc-l);border:1px solid var(--border);
-                    border-radius:var(--r);padding:14px 18px;margin-bottom:20px;
-                    display:flex;align-items:center;gap:12px">
-          <span style="font-family:var(--mono);font-size:.8rem;
-                       color:var(--accent);white-space:nowrap">
-            ТРЕНИРОВКА · ${stim.label}
-          </span>
-          <audio id="practice-audio-${idx}" controls preload="auto"
-                 style="flex:1;height:34px">
-            <source src="${stim.url}" type="audio/wav">
-          </audio>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--border);
-                    border-radius:var(--r);padding:18px 20px;margin-bottom:14px">
-          <p style="font-weight:600;margin-bottom:16px">
-            Оцените естественность речи:
-          </p>
-          <div style="display:flex;align-items:center;
-                      justify-content:center;gap:6px;flex-wrap:wrap">
-            <span style="font-size:.78rem;color:var(--muted);
-                         max-width:80px;text-align:center;line-height:1.3">
-              Очень<br>неестественно
+  return PRACTICE_STIMULI.map(function (stim, idx) {
+    return {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: function () {
+        return `
+          <div style="background:var(--acc-l);border:1px solid var(--border);
+                      border-radius:var(--r);padding:14px 18px;margin-bottom:20px;
+                      display:flex;align-items:center;gap:12px">
+            <span style="font-family:var(--mono);font-size:.8rem;
+                         color:var(--accent);white-space:nowrap">
+              ТРЕНИРОВКА · ${stim.label}
             </span>
-            ${[1,2,3,4,5].map(n => `
-              <label style="display:flex;flex-direction:column;
-                            align-items:center;gap:4px;cursor:pointer">
-                <span style="font-family:var(--mono);font-size:.85rem;
-                             color:var(--muted)">${n}</span>
-                <input type="radio" name="practice_mos_${idx}"
-                       value="${n}"
-                       style="width:18px;height:18px;
-                              accent-color:var(--accent)">
-              </label>`).join('')}
-            <span style="font-size:.78rem;color:var(--muted);
-                         max-width:80px;text-align:center;line-height:1.3">
-              Очень<br>естественно
-            </span>
+            <audio id="practice-audio-${idx}" controls preload="auto"
+                   style="flex:1;height:34px">
+              <source src="${stim.url}" type="audio/wav">
+            </audio>
           </div>
-        </div>
-        <p style="font-size:.82rem;color:var(--muted);text-align:center"
-           id="practice-hint-${idx}">
-          Прослушайте запись перед оценкой.
-          Доступно прослушиваний:
-          <strong id="practice-count-${idx}">2</strong>
-        </p>`;
-    },
+          <div style="background:var(--surface);border:1px solid var(--border);
+                      border-radius:var(--r);padding:18px 20px;margin-bottom:14px">
+            <p style="font-weight:600;margin-bottom:16px">
+              Оцените естественность речи:
+            </p>
+            <div style="display:flex;align-items:center;
+                        justify-content:center;gap:6px;flex-wrap:wrap">
+              <span style="font-size:.78rem;color:var(--muted);
+                           max-width:80px;text-align:center;line-height:1.3">
+                Очень<br>неестественно
+              </span>
+              ${[1,2,3,4,5].map(function(n) { return `
+                <label style="display:flex;flex-direction:column;
+                              align-items:center;gap:4px;cursor:pointer">
+                  <span style="font-family:var(--mono);font-size:.85rem;
+                               color:var(--muted)">${n}</span>
+                  <input type="radio" name="practice_mos_${idx}"
+                         value="${n}"
+                         style="width:18px;height:18px;
+                                accent-color:var(--accent)">
+                </label>`; }).join('')}
+              <span style="font-size:.78rem;color:var(--muted);
+                           max-width:80px;text-align:center;line-height:1.3">
+                Очень<br>естественно
+              </span>
+            </div>
+          </div>
+          <p style="font-size:.82rem;color:var(--muted);text-align:center"
+             id="practice-hint-${idx}">
+            Прослушайте запись перед оценкой.
+            Доступно прослушиваний:
+            <strong id="practice-count-${idx}">2</strong>
+          </p>`;
+      },
 
-    choices: ['Далее →'],
+      choices: ['Далее →'],
 
-    on_load: function () {
-      const btn     = document.querySelector('.jspsych-btn');
-      const audio   = document.getElementById(`practice-audio-${idx}`);
-      const countEl = document.getElementById(`practice-count-${idx}`);
-      const hintEl  = document.getElementById(`practice-hint-${idx}`);
+      on_load: function () {
+        const btn     = document.querySelector('.jspsych-btn');
+        const audio   = document.getElementById('practice-audio-' + idx);
+        const countEl = document.getElementById('practice-count-' + idx);
+        const hintEl  = document.getElementById('practice-hint-' + idx);
 
-      let playsLeft = 2;
-      let hasPlayed = false;
-      let hasRated  = false;
+        let playsLeft = 2;
+        let hasPlayed = false;
+        let hasRated  = false;
 
-      btn.disabled      = true;
-      btn.style.opacity = '0.4';
-      btn.style.cursor  = 'not-allowed';
+        btn.disabled      = true;
+        btn.style.opacity = '0.4';
+        btn.style.cursor  = 'not-allowed';
 
-      function tryUnlock() {
-        if (hasPlayed && hasRated) {
-          btn.disabled      = false;
-          btn.style.opacity = '1';
-          btn.style.cursor  = 'pointer';
-        }
-      }
-
-      audio.addEventListener('play', function () {
-        if (playsLeft > 0) {
-          playsLeft--;
-          hasPlayed = true;
-          countEl.textContent = playsLeft;
-          if (playsLeft === 0) {
-            audio.controls = false;
-            hintEl.innerHTML = 'Лимит прослушиваний исчерпан.';
+        function tryUnlock() {
+          if (hasPlayed && hasRated) {
+            btn.disabled      = false;
+            btn.style.opacity = '1';
+            btn.style.cursor  = 'pointer';
           }
-          tryUnlock();
         }
-      });
 
-      document.querySelectorAll(
-        `input[name="practice_mos_${idx}"]`
-      ).forEach(r => {
-        r.addEventListener('change', function () {
-          hasRated = true;
-          tryUnlock();
+        audio.addEventListener('play', function () {
+          if (playsLeft > 0) {
+            playsLeft--;
+            hasPlayed = true;
+            countEl.textContent = playsLeft;
+            if (playsLeft === 0) {
+              audio.controls = false;
+              hintEl.innerHTML = 'Лимит прослушиваний исчерпан.';
+            }
+            tryUnlock();
+          }
         });
-      });
-    },
 
-    on_finish: function (data) {
-      const sel = document.querySelector(
-        `input[name="practice_mos_${idx}"]:checked`
-      );
-      data.practice_mos   = sel ? parseInt(sel.value) : null;
-      data.practice_index = idx;
-      data.is_practice    = true;
-    },
-  }));
+        document.querySelectorAll(
+          'input[name="practice_mos_' + idx + '"]'
+        ).forEach(function (r) {
+          r.addEventListener('change', function () {
+            hasRated = true;
+            tryUnlock();
+          });
+        });
+      },
+
+      on_finish: function (data) {
+        const sel = document.querySelector(
+          'input[name="practice_mos_' + idx + '"]:checked'
+        );
+        data.practice_mos   = sel ? parseInt(sel.value) : null;
+        data.practice_index = idx;
+        data.is_practice    = true;
+      },
+    };
+  });
 }
 
 const trialPracticeDone = {
@@ -566,21 +581,23 @@ const trialPracticeDone = {
   choices: ['Начать основной блок →'],
 };
 
+// ================================================================
+// ЗАПУСК
+// ================================================================
 jsPsych.run([
   trialLoading,
   trialAssigned,
   trialScreening,
 
-  // Экран отсева — показывается только если не прошёл скрининг
   {
     timeline: [trialDisqualified],
     conditional_function: function () {
-      const s = SESSION.screening;
-      return s.native === 'no' || s.hearing === 'yes';
+      console.log('checking disqualified, screening:', JSON.stringify(SESSION.screening));
+      return SESSION.screening.native === 'no' ||
+             SESSION.screening.hearing === 'yes';
     },
   },
 
-  // Инструкция и тренировка — только если прошёл скрининг
   {
     timeline: [
       trialInstructions,
@@ -589,8 +606,9 @@ jsPsych.run([
       trialPracticeDone,
     ],
     conditional_function: function () {
-      const s = SESSION.screening;
-      return s.native === 'yes' && s.hearing === 'no';
+      console.log('checking qualified, screening:', JSON.stringify(SESSION.screening));
+      return SESSION.screening.native === 'yes' &&
+             SESSION.screening.hearing === 'no';
     },
   },
 ]);
