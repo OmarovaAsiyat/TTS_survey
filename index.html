@@ -106,7 +106,7 @@ const SESSION = {
   participant_id: null,
   survey_set:     null,
   stimuli:        [],
-  screening:      {
+  screening: {
     native:  null,
     hearing: null,
     device:  null,
@@ -165,9 +165,8 @@ const trialLoading = {
           <div class="full-box">
             <h2>Набор участников завершён</h2>
             <p>Спасибо за интерес к исследованию.<br>
-               Все места уже заняты, но мы рады каждому
-               участнику — следите за нашими следующими
-               исследованиями.</p>
+               Все места уже заняты — следите за нашими
+               следующими исследованиями.</p>
           </div>`;
         return;
       }
@@ -290,27 +289,22 @@ const trialScreening = {
   choices: ['Продолжить →'],
 
   on_load: function () {
-    ['sc_native', 'sc_hearing', 'sc_device', 'sc_expert'].forEach(function (name) {
-      document.querySelectorAll('[name="' + name + '"]').forEach(function (el) {
-        el.addEventListener('change', function () {
-          const key = name.replace('sc_', '');
-          SESSION.screening[key] = this.value;
-          console.log('screening update:', key, '=', this.value);
+    ['sc_native','sc_hearing','sc_device','sc_expert'].forEach(function(name) {
+      document.querySelectorAll('[name="' + name + '"]').forEach(function(el) {
+        el.addEventListener('change', function() {
+          SESSION.screening[name.replace('sc_', '')] = this.value;
         });
       });
     });
-
-    const ageEl = document.querySelector('[name="sc_age"]');
+    var ageEl = document.querySelector('[name="sc_age"]');
     if (ageEl) {
-      ageEl.addEventListener('input', function () {
+      ageEl.addEventListener('input', function() {
         SESSION.screening.age = this.value;
       });
     }
   },
 
-  on_finish: function () {
-    console.log('screening on_finish:', JSON.stringify(SESSION.screening));
-  },
+  on_finish: function () {},
 };
 
 // ================================================================
@@ -378,7 +372,7 @@ const trialInstructions = {
      <p>Оценивайте каждую запись <strong>независимо</strong>,
         не сравнивая с предыдущими.</p>`,
 
-`<h2>Важные правила</h2>
+    `<h2>Важные правила</h2>
      <div style="background:var(--surface);border:1px solid var(--border);
                  border-radius:var(--r);padding:20px;margin:16px 0;
                  display:flex;flex-direction:column;gap:14px">
@@ -407,10 +401,6 @@ const trialInstructions = {
                между сессиями.</span>
        </div>
      </div>`,
-     </div>
-     <p>Сначала будет <strong>тренировочный блок</strong>
-        из трёх записей — он поможет привыкнуть к формату.
-        Эти оценки не войдут в результаты исследования.</p>`,
   ],
   show_clickable_nav: true,
   button_label_next:     'Далее →',
@@ -418,7 +408,7 @@ const trialInstructions = {
 };
 
 // ================================================================
-// БЛОК 6. ТРЕНИРОВОЧНЫЙ БЛОК
+// БЛОК 6. ПРОБНЫЙ БЛОК (якоря — участник не знает)
 // ================================================================
 const PRACTICE_STIMULI = [
   {
@@ -457,17 +447,17 @@ const trialPracticeIntro = {
 };
 
 function buildPracticeTrials() {
-  return PRACTICE_STIMULI.map(function (stim, idx) {
+  return PRACTICE_STIMULI.map(function(stim, idx) {
     return {
       type: jsPsychHtmlButtonResponse,
-      stimulus: function () {
+      stimulus: function() {
         return `
           <div style="background:var(--acc-l);border:1px solid var(--border);
                       border-radius:var(--r);padding:14px 18px;margin-bottom:20px;
                       display:flex;align-items:center;gap:12px">
             <span style="font-family:var(--mono);font-size:.8rem;
                          color:var(--accent);white-space:nowrap">
-              ТРЕНИРОВКА · ${stim.label}
+              ${stim.label}
             </span>
             <audio id="practice-audio-${idx}" controls preload="auto"
                    style="flex:1;height:34px">
@@ -485,7 +475,8 @@ function buildPracticeTrials() {
                            max-width:80px;text-align:center;line-height:1.3">
                 Очень<br>неестественно
               </span>
-              ${[1,2,3,4,5].map(function(n) { return `
+              ${[1,2,3,4,5].map(function(n) {
+                return `
                 <label style="display:flex;flex-direction:column;
                               align-items:center;gap:4px;cursor:pointer">
                   <span style="font-family:var(--mono);font-size:.85rem;
@@ -494,7 +485,8 @@ function buildPracticeTrials() {
                          value="${n}"
                          style="width:18px;height:18px;
                                 accent-color:var(--accent)">
-                </label>`; }).join('')}
+                </label>`;
+              }).join('')}
               <span style="font-size:.78rem;color:var(--muted);
                            max-width:80px;text-align:center;line-height:1.3">
                 Очень<br>естественно
@@ -511,15 +503,15 @@ function buildPracticeTrials() {
 
       choices: ['Далее →'],
 
-      on_load: function () {
-        const btn     = document.querySelector('.jspsych-btn');
-        const audio   = document.getElementById('practice-audio-' + idx);
-        const countEl = document.getElementById('practice-count-' + idx);
-        const hintEl  = document.getElementById('practice-hint-' + idx);
+      on_load: function() {
+        var btn     = document.querySelector('.jspsych-btn');
+        var audio   = document.getElementById('practice-audio-' + idx);
+        var countEl = document.getElementById('practice-count-' + idx);
+        var hintEl  = document.getElementById('practice-hint-' + idx);
 
-        let playsLeft = 2;
-        let hasPlayed = false;
-        let hasRated  = false;
+        var playsLeft = 2;
+        var hasPlayed = false;
+        var hasRated  = false;
 
         btn.disabled      = true;
         btn.style.opacity = '0.4';
@@ -533,7 +525,7 @@ function buildPracticeTrials() {
           }
         }
 
-        audio.addEventListener('play', function () {
+        audio.addEventListener('play', function() {
           if (playsLeft > 0) {
             playsLeft--;
             hasPlayed = true;
@@ -548,21 +540,22 @@ function buildPracticeTrials() {
 
         document.querySelectorAll(
           'input[name="practice_mos_' + idx + '"]'
-        ).forEach(function (r) {
-          r.addEventListener('change', function () {
+        ).forEach(function(r) {
+          r.addEventListener('change', function() {
             hasRated = true;
             tryUnlock();
           });
         });
       },
 
-      on_finish: function (data) {
-        const sel = document.querySelector(
+      on_finish: function(data) {
+        var sel = document.querySelector(
           'input[name="practice_mos_' + idx + '"]:checked'
         );
         data.practice_mos   = sel ? parseInt(sel.value) : null;
         data.practice_index = idx;
         data.is_practice    = true;
+        data.anchor_quality = stim.quality;
       },
     };
   });
@@ -588,9 +581,8 @@ jsPsych.run([
 
   {
     timeline: [trialDisqualified],
-    conditional_function: function () {
-      console.log('checking disqualified, screening:', JSON.stringify(SESSION.screening));
-      return SESSION.screening.native === 'no' ||
+    conditional_function: function() {
+      return SESSION.screening.native  === 'no' ||
              SESSION.screening.hearing === 'yes';
     },
   },
@@ -602,9 +594,8 @@ jsPsych.run([
       ...buildPracticeTrials(),
       trialPracticeDone,
     ],
-    conditional_function: function () {
-      console.log('checking qualified, screening:', JSON.stringify(SESSION.screening));
-      return SESSION.screening.native === 'yes' &&
+    conditional_function: function() {
+      return SESSION.screening.native  === 'yes' &&
              SESSION.screening.hearing === 'no';
     },
   },
