@@ -566,35 +566,34 @@ const trialPracticeDone = {
   choices: ['Начать основной блок →'],
 };
 
-// ================================================================
-// ЛОГИКА ПОСЛЕ СКРИНИНГА
-// ================================================================
-function buildTimeline() {
-  const s = SESSION.screening;
-
-  if (s.native === 'no' || s.hearing === 'yes') {
-    jsPsych.run([trialDisqualified]);
-    return;
-  }
-
-  jsPsych.run([
-    trialInstructions,
-    trialPracticeIntro,
-    ...buildPracticeTrials(),
-    trialPracticeDone,
-  ]);
-}
-
-// ================================================================
-// ЗАПУСК
-// ================================================================
 jsPsych.run([
   trialLoading,
   trialAssigned,
   trialScreening,
-], {
-  on_finish: buildTimeline,
-});
+
+  // Экран отсева — показывается только если не прошёл скрининг
+  {
+    timeline: [trialDisqualified],
+    conditional_function: function () {
+      const s = SESSION.screening;
+      return s.native === 'no' || s.hearing === 'yes';
+    },
+  },
+
+  // Инструкция и тренировка — только если прошёл скрининг
+  {
+    timeline: [
+      trialInstructions,
+      trialPracticeIntro,
+      ...buildPracticeTrials(),
+      trialPracticeDone,
+    ],
+    conditional_function: function () {
+      const s = SESSION.screening;
+      return s.native === 'yes' && s.hearing === 'no';
+    },
+  },
+]);
 </script>
 </body>
 </html>
