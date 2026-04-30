@@ -378,7 +378,7 @@ const trialInstructions = {
      <p>Оценивайте каждую запись <strong>независимо</strong>,
         не сравнивая с предыдущими.</p>`,
 
-    `<h2>Важные правила</h2>
+`<h2>Важные правила</h2>
      <div style="background:var(--surface);border:1px solid var(--border);
                  border-radius:var(--r);padding:20px;margin:16px 0;
                  display:flex;flex-direction:column;gap:14px">
@@ -406,6 +406,7 @@ const trialInstructions = {
          <span>Не обновляйте страницу — прогресс не сохраняется
                между сессиями.</span>
        </div>
+     </div>`,
      </div>
      <p>Сначала будет <strong>тренировочный блок</strong>
         из трёх записей — он поможет привыкнуть к формату.
@@ -421,18 +422,23 @@ const trialInstructions = {
 // ================================================================
 const PRACTICE_STIMULI = [
   {
-    url:     'https://drive.google.com/uc?id=ВСТАВЬ_ID_ПЛОХОГО&export=download',
-    label:   'Запись 1 из 3',
+    url:     'https://drive.google.com/uc?id=11UXbG8RI5j0kD15fIEodMkxsfPRyXBDB&export=download',
+    label:   'Запись 1 из 4',
     quality: 'bad',
   },
   {
-    url:     'https://drive.google.com/uc?id=ВСТАВЬ_ID_СРЕДНЕГО&export=download',
-    label:   'Запись 2 из 3',
-    quality: 'medium',
+    url:     'https://drive.google.com/uc?id=1oYpG5oJ6hgS8vyMlkHC6hYJ_2GNmPTSE&export=download',
+    label:   'Запись 2 из 4',
+    quality: 'good',
   },
   {
-    url:     'https://drive.google.com/uc?id=ВСТАВЬ_ID_ХОРОШЕГО&export=download',
-    label:   'Запись 3 из 3',
+    url:     'https://drive.google.com/uc?id=120cTFpIvUaL_EiPXNH8ni59DJD2npwNb&export=download',
+    label:   'Запись 3 из 4',
+    quality: 'bad',
+  },
+  {
+    url:     'https://drive.google.com/uc?id=1iiAgY9DqRfVQygoXLtmaYA0BrbW_6BkR&export=download',
+    label:   'Запись 4 из 4',
     quality: 'good',
   },
 ];
@@ -441,18 +447,13 @@ const trialPracticeIntro = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
     <div style="text-align:center;padding:20px 0">
-      <h2>Тренировочный блок</h2>
-      <p>Сейчас вы прослушаете три записи, чтобы привыкнуть
-         к формату оценки.</p>
-      <p>Записи намеренно различаются по качеству —
-         от плохого до хорошего. Это поможет вам
-         откалибровать свои оценки.</p>
-      <p style="color:var(--muted);font-size:.9rem">
-        Эти оценки <strong>не войдут</strong>
-        в результаты исследования.
-      </p>
+      <h2>Пробный блок</h2>
+      <p>Перед началом основного теста вы прослушаете
+         четыре записи в том же формате.</p>
+      <p>Оценивайте так же, как будете оценивать
+         в основном блоке — по первому впечатлению.</p>
     </div>`,
-  choices: ['Начать тренировку →'],
+  choices: ['Начать →'],
 };
 
 function buildPracticeTrials() {
@@ -571,14 +572,10 @@ const trialPracticeDone = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
     <div style="text-align:center;padding:30px 0">
-      <h2>Тренировка завершена</h2>
-      <p>Теперь начнётся основной блок.</p>
-      <p style="color:var(--muted);font-size:.9rem;margin-top:8px">
-        Оценивайте каждую запись независимо,
-        по первому впечатлению.
-      </p>
+      <h2>Можно начинать</h2>
+      <p>Нажмите кнопку, чтобы перейти к основной части.</p>
     </div>`,
-  choices: ['Начать основной блок →'],
+  choices: ['Продолжить →'],
 };
 
 // ================================================================
