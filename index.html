@@ -93,6 +93,68 @@
       color: var(--muted);
       font-style: italic;
     }
+
+    /* Блок диагностики — скрыт по умолчанию */
+    .diag-block {
+      display: none;
+      background: #fff8e1;
+      border: 1px solid #f0c040;
+      border-radius: var(--r);
+      padding: 16px 18px;
+      margin-top: 14px;
+    }
+
+    .diag-block.visible { display: block; }
+
+    .diag-block p {
+      font-weight: 600;
+      font-size: .9rem;
+      margin-bottom: 10px;
+    }
+
+    .diag-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: .9rem;
+      cursor: pointer;
+    }
+
+    .diag-other {
+      margin-top: 8px;
+      width: 100%;
+      font-family: "IBM Plex Sans", sans-serif;
+      font-size: .9rem;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      display: none;
+    }
+
+    /* Блок функционального типа */
+    .functype-block {
+      background: var(--acc-l);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 16px 18px;
+      margin-top: 14px;
+    }
+
+    .functype-block p {
+      font-weight: 600;
+      font-size: .9rem;
+      margin-bottom: 10px;
+    }
+
+    .functype-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: .9rem;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -107,6 +169,7 @@ const SESSION = {
   bibd_key:       null,
   survey_set:     null,
   stimuli:        [],
+  responses:      [],
   screening: {
     native:  null,
     hearing: null,
@@ -126,22 +189,47 @@ async function gasGet(action) {
   return fetchJSON(GAS_URL + '?action=' + action);
 }
 
-// Загружает аудио через GAS-прокси (base64) и вставляет в элемент
+// Извлечь file ID из ссылки Drive
+function extractFileId(url) {
+  var match = url.match(/[?&]id=([^&]+)/);
+  return match ? match[1] : null;
+}
+
+// Загрузить аудио через GAS-прокси (base64)
 async function loadAudio(fileId, audioElementId) {
   try {
-    const url  = GAS_URL + '?action=audio&id=' + fileId;
-    const r    = await fetch(url);
-    const b64  = await r.text();
-    const el   = document.getElementById(audioElementId);
+    var url  = GAS_URL + '?action=audio&id=' + fileId;
+    var r    = await fetch(url);
+    var b64  = await r.text();
+    var el   = document.getElementById(audioElementId);
     if (el) {
       el.src = 'data:audio/wav;base64,' + b64;
       el.load();
-      // Убираем индикатор загрузки
-      const hint = document.getElementById('loading-hint-' + audioElementId);
+      var hint = document.getElementById('loading-hint-' + audioElementId);
       if (hint) hint.style.display = 'none';
     }
   } catch (err) {
     console.error('Ошибка загрузки аудио:', err);
+  }
+}
+
+// Отправить результаты в GAS
+async function sendResults() {
+  try {
+    await fetch(GAS_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action:         'save',
+        participant_id: SESSION.participant_id,
+        bibd_key:       SESSION.bibd_key,
+        survey_set:     SESSION.survey_set,
+        screening:      SESSION.screening,
+        data:           SESSION.responses,
+      }),
+    });
+  } catch (err) {
+    console.error('Ошибка отправки:', err);
   }
 }
 
@@ -166,13 +254,13 @@ const trialLoading = {
 
   on_load: async function () {
     try {
-      const res = await gasGet('assign');
+      var res = await gasGet('assign');
 
       SESSION.participant_id = res.participant_id;
       SESSION.bibd_key       = res.bibd_key;
       SESSION.survey_set     = parseInt(res.bibd_key.replace('P', ''), 10);
 
-      const bibd = await fetchJSON(BIBD_URL);
+      var bibd = await fetchJSON(BIBD_URL);
 
       if (!bibd[SESSION.bibd_key]) {
         throw new Error('Набор ' + SESSION.bibd_key + ' не найден в BIBD');
@@ -182,16 +270,9 @@ const trialLoading = {
       jsPsych.finishTrial();
 
     } catch (err) {
-      document.querySelector('.jspsych-content').innerHTML = `
-        <div class="full-box">
-          <h2>Ошибка загрузки</h2>
-          <p>${err.message}</p>
-          <p style="margin-top:20px">
-            <button class="jspsych-btn" onclick="location.reload()">
-              Попробовать снова
-            </button>
-          </p>
-        </div>`;
+      document.querySelector('.jspsych-content').innerHTML =
+        '<div class="full-box"><h2>Ошибка загрузки</h2><p>' + err.message + '</p>' +
+        '<p style="margin-top:20px"><button class="jspsych-btn" onclick="location.reload()">Попробовать снова</button></p></div>';
     }
   },
 };
@@ -212,7 +293,6 @@ const trialScreening = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
     <h2>Несколько вопросов перед началом</h2>
-
     <div style="background:var(--surface);border:1px solid var(--border);
                 border-radius:var(--r);padding:20px;margin:16px 0">
 
@@ -245,16 +325,13 @@ const trialScreening = {
       </p>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="sc_device" value="headphones">
-          Наушники
+          <input type="radio" name="sc_device" value="headphones"> Наушники
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="sc_device" value="speakers">
-          Внешние колонки
+          <input type="radio" name="sc_device" value="speakers"> Внешние колонки
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="radio" name="sc_device" value="laptop">
-          Встроенные динамики ноутбука или телефона
+          <input type="radio" name="sc_device" value="laptop"> Встроенные динамики ноутбука или телефона
         </label>
       </div>
 
@@ -267,9 +344,7 @@ const trialScreening = {
 
       <p style="font-weight:600;margin-bottom:6px">
         Есть ли у вас профессиональный опыт работы со звуком или речью?
-        <span style="font-weight:400;color:var(--muted)">
-          (лингвист, звукорежиссёр, логопед и т.п.)
-        </span>
+        <span style="font-weight:400;color:var(--muted)">(лингвист, звукорежиссёр, логопед и т.п.)</span>
       </p>
       <div style="display:flex;flex-direction:column;gap:6px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -298,7 +373,6 @@ const trialScreening = {
       });
     }
   },
-
   on_finish: function () {},
 };
 
@@ -332,36 +406,24 @@ const trialInstructions = {
         колонки в тихом помещении.</p>`,
 
     `<h2>Как оценивать</h2>
-     <p>Для каждой записи вы выставите оценку
-        по пятибалльной шкале:</p>
+     <p>Для каждой записи вы выставите оценку по пятибалльной шкале:</p>
      <div style="background:var(--surface);border:1px solid var(--border);
                  border-radius:var(--r);padding:20px;margin:16px 0">
        <div style="display:grid;grid-template-columns:auto 1fr;
                    gap:10px 16px;align-items:start">
-         <span style="font-family:var(--mono);font-size:1.1rem;
-                      color:var(--accent);font-weight:600">5</span>
-         <span><strong>Очень естественно</strong> —
-               практически как живая речь</span>
-         <span style="font-family:var(--mono);font-size:1.1rem;
-                      color:var(--accent);font-weight:600">4</span>
-         <span><strong>Естественно</strong> —
-               звучит хорошо, мелкие огрехи не мешают</span>
-         <span style="font-family:var(--mono);font-size:1.1rem;
-                      color:var(--accent);font-weight:600">3</span>
-         <span><strong>Нейтрально</strong> —
-               есть недостатки, но терпимо</span>
-         <span style="font-family:var(--mono);font-size:1.1rem;
-                      color:var(--accent);font-weight:600">2</span>
-         <span><strong>Неестественно</strong> —
-               заметные проблемы, мешающие восприятию</span>
-         <span style="font-family:var(--mono);font-size:1.1rem;
-                      color:var(--accent);font-weight:600">1</span>
-         <span><strong>Очень неестественно</strong> —
-               явные ошибки, слушать некомфортно</span>
+         <span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">5</span>
+         <span><strong>Очень естественно</strong> — практически как живая речь</span>
+         <span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">4</span>
+         <span><strong>Естественно</strong> — звучит хорошо, мелкие огрехи не мешают</span>
+         <span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">3</span>
+         <span><strong>Нейтрально</strong> — есть недостатки, но терпимо</span>
+         <span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">2</span>
+         <span><strong>Неестественно</strong> — заметные проблемы, мешающие восприятию</span>
+         <span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">1</span>
+         <span><strong>Очень неестественно</strong> — явные ошибки, слушать некомфортно</span>
        </div>
      </div>
-     <p>Оценивайте каждую запись <strong>независимо</strong>,
-        не сравнивая с предыдущими.</p>`,
+     <p>Оценивайте каждую запись <strong>независимо</strong>, не сравнивая с предыдущими.</p>`,
 
     `<h2>Важные правила</h2>
      <div style="background:var(--surface);border:1px solid var(--border);
@@ -369,27 +431,22 @@ const trialInstructions = {
                  display:flex;flex-direction:column;gap:14px">
        <div style="display:flex;gap:12px;align-items:flex-start">
          <span style="font-size:1.3rem">🎧</span>
-         <span>Каждую запись можно прослушать
-               <strong>не более двух раз</strong>.
-               После второго воспроизведения кнопка
-               плеера заблокируется.</span>
+         <span>Каждую запись можно прослушать <strong>не более двух раз</strong>.
+               После второго воспроизведения кнопка плеера заблокируется.</span>
        </div>
        <div style="display:flex;gap:12px;align-items:flex-start">
          <span style="font-size:1.3rem">⏭️</span>
-         <span>Кнопка <strong>«Далее»</strong> становится
-               активной только после того, как вы прослушали
-               запись и выставили оценку.</span>
+         <span>Кнопка <strong>«Далее»</strong> становится активной только после
+               того, как вы прослушали запись и выставили оценку.</span>
        </div>
        <div style="display:flex;gap:12px;align-items:flex-start">
          <span style="font-size:1.3rem">💬</span>
-         <span>Для некоторых записей появится
-               <strong>дополнительный вопрос</strong> —
+         <span>Для некоторых записей появится <strong>дополнительный вопрос</strong> —
                отвечайте по первому впечатлению.</span>
        </div>
        <div style="display:flex;gap:12px;align-items:flex-start">
          <span style="font-size:1.3rem">🔄</span>
-         <span>Не обновляйте страницу — прогресс не сохраняется
-               между сессиями.</span>
+         <span>Не обновляйте страницу — прогресс не сохраняется между сессиями.</span>
        </div>
      </div>`,
   ],
@@ -411,10 +468,8 @@ const trialPracticeIntro = {
   stimulus: `
     <div style="text-align:center;padding:20px 0">
       <h2>Пробный блок</h2>
-      <p>Перед началом основного теста вы прослушаете
-         четыре записи в том же формате.</p>
-      <p>Оценивайте так же, как будете оценивать
-         в основном блоке — по первому впечатлению.</p>
+      <p>Перед началом основного теста вы прослушаете четыре записи в том же формате.</p>
+      <p>Оценивайте так же, как будете оценивать в основном блоке — по первому впечатлению.</p>
     </div>`,
   choices: ['Начать →'],
 };
@@ -429,118 +484,74 @@ function buildPracticeTrials() {
                       border-radius:var(--r);padding:14px 18px;margin-bottom:20px;
                       display:flex;align-items:center;gap:12px">
             <span style="font-family:var(--mono);font-size:.8rem;
-                         color:var(--accent);white-space:nowrap">
-              ${stim.label}
-            </span>
+                         color:var(--accent);white-space:nowrap">${stim.label}</span>
             <div style="flex:1;display:flex;flex-direction:column;gap:4px">
-              <audio id="audio-practice-${idx}" controls
-                     style="width:100%;height:34px">
-              </audio>
-              <span class="audio-loading"
-                    id="loading-hint-audio-practice-${idx}">
-                Загрузка аудио...
-              </span>
+              <audio id="audio-practice-${idx}" controls style="width:100%;height:34px"></audio>
+              <span class="audio-loading" id="loading-hint-audio-practice-${idx}">Загрузка аудио...</span>
             </div>
           </div>
-
           <div style="background:var(--surface);border:1px solid var(--border);
                       border-radius:var(--r);padding:18px 20px;margin-bottom:14px">
-            <p style="font-weight:600;margin-bottom:16px">
-              Оцените естественность речи:
-            </p>
-            <div style="display:flex;align-items:center;
-                        justify-content:center;gap:6px;flex-wrap:wrap">
-              <span style="font-size:.78rem;color:var(--muted);
-                           max-width:80px;text-align:center;line-height:1.3">
+            <p style="font-weight:600;margin-bottom:16px">Оцените естественность речи:</p>
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">
+              <span style="font-size:.78rem;color:var(--muted);max-width:80px;text-align:center;line-height:1.3">
                 Очень<br>неестественно
               </span>
               ${[1,2,3,4,5].map(function(n) {
-                return `
-                <label style="display:flex;flex-direction:column;
-                              align-items:center;gap:4px;cursor:pointer">
-                  <span style="font-family:var(--mono);font-size:.85rem;
-                               color:var(--muted)">${n}</span>
-                  <input type="radio" name="practice_mos_${idx}"
-                         value="${n}"
-                         style="width:18px;height:18px;
-                                accent-color:var(--accent)">
-                </label>`;
+                return '<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer">' +
+                  '<span style="font-family:var(--mono);font-size:.85rem;color:var(--muted)">' + n + '</span>' +
+                  '<input type="radio" name="practice_mos_' + idx + '" value="' + n + '" style="width:18px;height:18px;accent-color:var(--accent)">' +
+                  '</label>';
               }).join('')}
-              <span style="font-size:.78rem;color:var(--muted);
-                           max-width:80px;text-align:center;line-height:1.3">
+              <span style="font-size:.78rem;color:var(--muted);max-width:80px;text-align:center;line-height:1.3">
                 Очень<br>естественно
               </span>
             </div>
           </div>
-
-          <p style="font-size:.82rem;color:var(--muted);text-align:center"
-             id="practice-hint-${idx}">
+          <p style="font-size:.82rem;color:var(--muted);text-align:center" id="practice-hint-${idx}">
             Прослушайте запись перед оценкой.
-            Доступно прослушиваний:
-            <strong id="practice-count-${idx}">2</strong>
+            Доступно прослушиваний: <strong id="practice-count-${idx}">2</strong>
           </p>`;
       },
-
       choices: ['Далее →'],
-
       on_load: function() {
-        var audioId = 'audio-practice-' + idx;
-        var btn     = document.querySelector('.jspsych-btn');
-        var countEl = document.getElementById('practice-count-' + idx);
-        var hintEl  = document.getElementById('practice-hint-' + idx);
-
+        var audioId   = 'audio-practice-' + idx;
+        var btn       = document.querySelector('.jspsych-btn');
+        var countEl   = document.getElementById('practice-count-' + idx);
+        var hintEl    = document.getElementById('practice-hint-' + idx);
         var playsLeft = 2;
         var hasPlayed = false;
         var hasRated  = false;
 
-        btn.disabled      = true;
-        btn.style.opacity = '0.4';
-        btn.style.cursor  = 'not-allowed';
+        btn.disabled = true; btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed';
 
         function tryUnlock() {
           if (hasPlayed && hasRated) {
-            btn.disabled      = false;
-            btn.style.opacity = '1';
-            btn.style.cursor  = 'pointer';
+            btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
           }
         }
 
-        // Загружаем аудио через прокси
         loadAudio(stim.fileId, audioId).then(function() {
           var audio = document.getElementById(audioId);
           if (!audio) return;
-
           audio.addEventListener('play', function() {
             if (playsLeft > 0) {
-              playsLeft--;
-              hasPlayed = true;
+              playsLeft--; hasPlayed = true;
               countEl.textContent = playsLeft;
-              if (playsLeft === 0) {
-                audio.controls = false;
-                hintEl.innerHTML = 'Лимит прослушиваний исчерпан.';
-              }
+              if (playsLeft === 0) { audio.controls = false; hintEl.innerHTML = 'Лимит прослушиваний исчерпан.'; }
               tryUnlock();
             }
           });
         });
 
-        document.querySelectorAll(
-          'input[name="practice_mos_' + idx + '"]'
-        ).forEach(function(r) {
-          r.addEventListener('change', function() {
-            hasRated = true;
-            tryUnlock();
-          });
+        document.querySelectorAll('input[name="practice_mos_' + idx + '"]').forEach(function(r) {
+          r.addEventListener('change', function() { hasRated = true; tryUnlock(); });
         });
       },
-
       on_finish: function(data) {
-        var sel = document.querySelector(
-          'input[name="practice_mos_' + idx + '"]:checked'
-        );
-        data.practice_mos   = sel ? parseInt(sel.value) : null;
-        data.practice_index = idx;
-        data.is_practice    = true;
+        var sel = document.querySelector('input[name="practice_mos_' + idx + '"]:checked');
+        data.practice_mos = sel ? parseInt(sel.value) : null;
+        data.is_practice  = true;
         data.anchor_quality = stim.quality;
       },
     };
@@ -555,6 +566,253 @@ const trialPracticeDone = {
       <p>Нажмите кнопку, чтобы перейти к основной части.</p>
     </div>`,
   choices: ['Продолжить →'],
+};
+
+// ================================================================
+// БЛОК 7. ОСНОВНОЙ БЛОК MOS
+// ================================================================
+function buildMainTrials() {
+  return SESSION.stimuli.map(function(stim, idx) {
+    var fileId     = extractFileId(stim.url);
+    var isDialogue = stim.block === 'dialogue';
+    var audioId    = 'audio-main-' + idx;
+
+    return {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: function() {
+        var diagHtml = `
+          <div class="diag-block" id="diag-block-${idx}">
+            <p>Что именно звучит неестественно? (можно выбрать несколько)</p>
+            <label class="diag-option">
+              <input type="checkbox" name="diag_${idx}" value="ударение">
+              Неправильное ударение в словах
+            </label>
+            <label class="diag-option">
+              <input type="checkbox" name="diag_${idx}" value="тембр">
+              Неестественный или неприятный тембр голоса
+            </label>
+            <label class="diag-option">
+              <input type="checkbox" name="diag_${idx}" value="скачки">
+              Резкие скачки или перепады голоса
+            </label>
+            <label class="diag-option">
+              <input type="checkbox" name="diag_${idx}" value="носовой">
+              Носовой / гнусавый оттенок
+            </label>
+            <label class="diag-option">
+              <input type="checkbox" name="diag_${idx}" value="произношение">
+              Нечёткое или смазанное произношение звуков
+            </label>
+            <label class="diag-option">
+              <input type="checkbox" name="diag_${idx}" value="интонация">
+              Неподходящая интонация
+            </label>
+            <label class="diag-option">
+              <input type="checkbox" name="diag_${idx}" value="шумы">
+              Посторонние шумы или артефакты записи
+            </label>
+            <label class="diag-option">
+              <input type="checkbox" name="diag_${idx}" value="другое"
+                     id="diag-other-cb-${idx}">
+              Другое
+            </label>
+            <input type="text" class="diag-other" id="diag-other-text-${idx}"
+                   placeholder="Опишите кратко...">
+          </div>`;
+
+        var functypeHtml = isDialogue ? `
+          <div class="functype-block">
+            <p>Какой тип высказывания вы услышали?</p>
+            <label class="functype-option">
+              <input type="radio" name="functype_${idx}" value="question"> Вопрос
+            </label>
+            <label class="functype-option">
+              <input type="radio" name="functype_${idx}" value="short_answer"> Краткий ответ
+            </label>
+            <label class="functype-option">
+              <input type="radio" name="functype_${idx}" value="imperative"> Побуждение / просьба
+            </label>
+            <label class="functype-option">
+              <input type="radio" name="functype_${idx}" value="emotional"> Эмоциональная реплика
+            </label>
+            <label class="functype-option">
+              <input type="radio" name="functype_${idx}" value="discourse"> Дискурсивный маркер
+            </label>
+            <label class="functype-option">
+              <input type="radio" name="functype_${idx}" value="unknown"> Затрудняюсь определить
+            </label>
+          </div>` : '';
+
+        return `
+          <div style="background:var(--acc-l);border:1px solid var(--border);
+                      border-radius:var(--r);padding:14px 18px;margin-bottom:20px;
+                      display:flex;align-items:center;gap:12px">
+            <span style="font-family:var(--mono);font-size:.78rem;
+                         color:var(--accent);white-space:nowrap">
+              ${idx + 1} / ${SESSION.stimuli.length}
+            </span>
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+              <audio id="${audioId}" controls style="width:100%;height:34px"></audio>
+              <span class="audio-loading" id="loading-hint-${audioId}">Загрузка аудио...</span>
+            </div>
+          </div>
+
+          <div style="background:var(--surface);border:1px solid var(--border);
+                      border-radius:var(--r);padding:18px 20px;margin-bottom:14px">
+            <p style="font-weight:600;margin-bottom:16px">Оцените естественность речи:</p>
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">
+              <span style="font-size:.78rem;color:var(--muted);max-width:80px;text-align:center;line-height:1.3">
+                Очень<br>неестественно
+              </span>
+              ${[1,2,3,4,5].map(function(n) {
+                return '<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer">' +
+                  '<span style="font-family:var(--mono);font-size:.85rem;color:var(--muted)">' + n + '</span>' +
+                  '<input type="radio" name="mos_' + idx + '" value="' + n + '" style="width:18px;height:18px;accent-color:var(--accent)">' +
+                  '</label>';
+              }).join('')}
+              <span style="font-size:.78rem;color:var(--muted);max-width:80px;text-align:center;line-height:1.3">
+                Очень<br>естественно
+              </span>
+            </div>
+            ${diagHtml}
+          </div>
+
+          ${functypeHtml}
+
+          <p style="font-size:.82rem;color:var(--muted);text-align:center" id="main-hint-${idx}">
+            Прослушайте запись перед оценкой.
+            Доступно прослушиваний: <strong id="main-count-${idx}">2</strong>
+          </p>`;
+      },
+
+      choices: ['Далее →'],
+
+      on_load: function() {
+        var btn       = document.querySelector('.jspsych-btn');
+        var countEl   = document.getElementById('main-count-' + idx);
+        var hintEl    = document.getElementById('main-hint-' + idx);
+        var diagBlock = document.getElementById('diag-block-' + idx);
+        var otherCb   = document.getElementById('diag-other-cb-' + idx);
+        var otherTxt  = document.getElementById('diag-other-text-' + idx);
+
+        var playsLeft  = 2;
+        var hasPlayed  = false;
+        var hasRated   = false;
+        var hasFunctype = !isDialogue; // если не диалог — не требуем
+
+        btn.disabled = true; btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed';
+
+        function tryUnlock() {
+          if (hasPlayed && hasRated && hasFunctype) {
+            btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+          }
+        }
+
+        // Загружаем аудио
+        loadAudio(fileId, audioId).then(function() {
+          var audio = document.getElementById(audioId);
+          if (!audio) return;
+          audio.addEventListener('play', function() {
+            if (playsLeft > 0) {
+              playsLeft--; hasPlayed = true;
+              countEl.textContent = playsLeft;
+              if (playsLeft === 0) {
+                audio.controls = false;
+                hintEl.innerHTML = 'Лимит прослушиваний исчерпан.';
+              }
+              tryUnlock();
+            }
+          });
+        });
+
+        // MOS выбор — показываем/скрываем диагностику
+        document.querySelectorAll('input[name="mos_' + idx + '"]').forEach(function(r) {
+          r.addEventListener('change', function() {
+            hasRated = true;
+            var score = parseInt(this.value);
+            if (score <= 3) {
+              diagBlock.classList.add('visible');
+            } else {
+              diagBlock.classList.remove('visible');
+            }
+            tryUnlock();
+          });
+        });
+
+        // Поле "Другое" в диагностике
+        if (otherCb && otherTxt) {
+          otherCb.addEventListener('change', function() {
+            otherTxt.style.display = this.checked ? 'block' : 'none';
+          });
+        }
+
+        // Функциональный тип (только для диалоговых)
+        if (isDialogue) {
+          document.querySelectorAll('input[name="functype_' + idx + '"]').forEach(function(r) {
+            r.addEventListener('change', function() {
+              hasFunctype = true;
+              tryUnlock();
+            });
+          });
+        }
+      },
+
+      on_finish: function(data) {
+        var mosSel = document.querySelector('input[name="mos_' + idx + '"]:checked');
+        var mosScore = mosSel ? parseInt(mosSel.value) : null;
+
+        // Собираем диагностику
+        var diagnostics = [];
+        document.querySelectorAll('input[name="diag_' + idx + '"]:checked').forEach(function(cb) {
+          diagnostics.push(cb.value);
+        });
+        var otherText = document.getElementById('diag-other-text-' + idx);
+        if (otherText && otherText.value.trim()) {
+          diagnostics.push('другое: ' + otherText.value.trim());
+        }
+
+        // Функциональный тип
+        var functypeSel = document.querySelector('input[name="functype_' + idx + '"]:checked');
+
+        var response = {
+          participant_id:  SESSION.participant_id,
+          bibd_key:        SESSION.bibd_key,
+          survey_set:      SESSION.survey_set,
+          timestamp:       new Date().toISOString(),
+          block:           stim.block,
+          text_id:         stim.text_id,
+          system:          stim.system,
+          order:           stim.order,
+          mos_score:       mosScore,
+          diagnostics:     diagnostics,
+          func_type_answer: functypeSel ? functypeSel.value : null,
+          is_anchor:       false,
+          anchor_type:     '',
+        };
+
+        SESSION.responses.push(response);
+        data.main_response = response;
+      },
+    };
+  });
+}
+
+// ── Блок 8. Завершение ────────────────────────────────────────────
+const trialGoodbye = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div style="text-align:center;padding:40px 0">
+      <h2>Спасибо за участие!</h2>
+      <p>Ваши ответы записаны. Страницу можно закрыть.</p>
+      <p style="color:var(--muted);font-size:.9rem;margin-top:16px">
+        Исследование проводит кафедра фонетики СПбГУ.<br>
+        Если у вас есть вопросы — напишите организаторам.
+      </p>
+    </div>`,
+  choices: [],
+  on_load: async function() {
+    await sendResults();
+  },
 };
 
 // ── Запуск ────────────────────────────────────────────────────────
@@ -577,6 +835,8 @@ jsPsych.run([
       trialPracticeIntro,
       ...buildPracticeTrials(),
       trialPracticeDone,
+      ...buildMainTrials(),
+      trialGoodbye,
     ],
     conditional_function: function() {
       return SESSION.screening.native  === 'yes' &&
