@@ -93,17 +93,12 @@
 <div id="jspsych-target"></div>
 
 <script>
-// ================================================================
-// КОНФИГУРАЦИЯ
-// ================================================================
 const GAS_URL  = 'https://script.google.com/macros/s/AKfycbxQ04SXN7KwFAFBt-bJcUyruT2fuTRqwyIkoY9WLUvJ_qiuSRHaesJyjl3zazstniaw7g/exec';
 const BIBD_URL = './bibd_assignments.json';
 
-// ================================================================
-// ГЛОБАЛЬНОЕ СОСТОЯНИЕ СЕССИИ
-// ================================================================
 const SESSION = {
   participant_id: null,
+  bibd_key:       null,
   survey_set:     null,
   stimuli:        [],
   screening: {
@@ -115,12 +110,9 @@ const SESSION = {
   },
 };
 
-// ================================================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-// ================================================================
 async function fetchJSON(url) {
   const r = await fetch(url);
-  if (!r.ok) throw new Error('Не удалось загрузить файл: ' + url);
+  if (!r.ok) throw new Error('Не удалось загрузить: ' + url);
   return r.json();
 }
 
@@ -128,22 +120,17 @@ async function gasGet(action) {
   return fetchJSON(GAS_URL + '?action=' + action);
 }
 
-function pidToSetNumber(pid) {
-  return parseInt(pid.replace('P', ''), 10);
+function audioURL(fileId) {
+  return GAS_URL + '?action=audio&id=' + fileId;
 }
 
-// ================================================================
-// ИНИЦИАЛИЗАЦИЯ jsPsych
-// ================================================================
 const jsPsych = initJsPsych({
   display_element:          'jspsych-target',
   show_progress_bar:        true,
   auto_update_progress_bar: true,
 });
 
-// ================================================================
-// БЛОК 1. ЗАГРУЗКА И НАЗНАЧЕНИЕ УЧАСТНИКА
-// ================================================================
+// ── Блок 1. Загрузка ─────────────────────────────────────────────
 const trialLoading = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
@@ -158,31 +145,19 @@ const trialLoading = {
 
   on_load: async function () {
     try {
-      const assignResult = await gasGet('assign');
+      const res = await gasGet('assign');
 
-      if (assignResult.status === 'full') {
-        document.querySelector('.jspsych-content').innerHTML = `
-          <div class="full-box">
-            <h2>Набор участников завершён</h2>
-            <p>Спасибо за интерес к исследованию.<br>
-               Все места уже заняты — следите за нашими
-               следующими исследованиями.</p>
-          </div>`;
-        return;
-      }
-
-      SESSION.participant_id = assignResult.participant_id;
-      SESSION.survey_set     = pidToSetNumber(SESSION.participant_id);
+      SESSION.participant_id = res.participant_id;
+      SESSION.bibd_key       = res.bibd_key;
+      SESSION.survey_set     = parseInt(res.bibd_key.replace('P', ''), 10);
 
       const bibd = await fetchJSON(BIBD_URL);
-      if (!bibd[SESSION.participant_id]) {
-        throw new Error('Набор для ' + SESSION.participant_id + ' не найден');
+
+      if (!bibd[SESSION.bibd_key]) {
+        throw new Error('Набор ' + SESSION.bibd_key + ' не найден в BIBD');
       }
-const bidbKey = SESSION.participant_id.replace(/_\d+$/, '');
-SESSION.stimuli = bibd[bidbKey];
-if (!SESSION.stimuli) {
-  throw new Error('Набор для ' + bidbKey + ' не найден');
-}
+
+      SESSION.stimuli = bibd[SESSION.bibd_key];
       jsPsych.finishTrial();
 
     } catch (err) {
@@ -200,9 +175,7 @@ if (!SESSION.stimuli) {
   },
 };
 
-// ================================================================
-// БЛОК 2. ЭКРАН ПОДТВЕРЖДЕНИЯ
-// ================================================================
+// ── Блок 2. Подтверждение ─────────────────────────────────────────
 const trialAssigned = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
@@ -213,9 +186,7 @@ const trialAssigned = {
   choices: ['Начать →'],
 };
 
-// ================================================================
-// БЛОК 3. СКРИНИНГ
-// ================================================================
+// ── Блок 3. Скрининг ──────────────────────────────────────────────
 const trialScreening = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
@@ -310,9 +281,7 @@ const trialScreening = {
   on_finish: function () {},
 };
 
-// ================================================================
-// БЛОК 4. ЭКРАН ОТСЕВА
-// ================================================================
+// ── Блок 4. Отсев ────────────────────────────────────────────────
 const trialDisqualified = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
@@ -328,9 +297,7 @@ const trialDisqualified = {
   choices: [],
 };
 
-// ================================================================
-// БЛОК 5. ИНСТРУКЦИЯ
-// ================================================================
+// ── Блок 5. Инструкция ────────────────────────────────────────────
 const trialInstructions = {
   type: jsPsychInstructions,
   pages: [
@@ -410,27 +377,25 @@ const trialInstructions = {
   button_label_previous: '← Назад',
 };
 
-// ================================================================
-// БЛОК 6. ПРОБНЫЙ БЛОК (якоря — участник не знает)
-// ================================================================
+// ── Блок 6. Пробный блок ─────────────────────────────────────────
 const PRACTICE_STIMULI = [
   {
-    url:     'https://script.google.com/macros/s/AKfycbxQ04SXN7KwFAFBt-bJcUyruT2fuTRqwyIkoY9WLUvJ_qiuSRHaesJyjl3zazstniaw7g/exec?action=audio&id=11UXbG8RI5j0kD15fIEodMkxsfPRyXBDB',
+    url:     audioURL('11UXbG8RI5j0kD15fIEodMkxsfPRyXBDB'),
     label:   'Запись 1 из 4',
     quality: 'bad',
   },
   {
-    url:     'https://script.google.com/macros/s/AKfycbxQ04SXN7KwFAFBt-bJcUyruT2fuTRqwyIkoY9WLUvJ_qiuSRHaesJyjl3zazstniaw7g/exec?action=audio&id=1oYpG5oJ6hgS8vyMlkHC6hYJ_2GNmPTSE',
+    url:     audioURL('1oYpG5oJ6hgS8vyMlkHC6hYJ_2GNmPTSE'),
     label:   'Запись 2 из 4',
     quality: 'good',
   },
   {
-    url:     'https://script.google.com/macros/s/AKfycbxQ04SXN7KwFAFBt-bJcUyruT2fuTRqwyIkoY9WLUvJ_qiuSRHaesJyjl3zazstniaw7g/exec?action=audio&id=120cTFpIvUaL_EiPXNH8ni59DJD2npwNb',
+    url:     audioURL('120cTFpIvUaL_EiPXNH8ni59DJD2npwNb'),
     label:   'Запись 3 из 4',
     quality: 'bad',
   },
   {
-    url:     'https://script.google.com/macros/s/AKfycbxQ04SXN7KwFAFBt-bJcUyruT2fuTRqwyIkoY9WLUvJ_qiuSRHaesJyjl3zazstniaw7g/exec?action=audio&id=1iiAgY9DqRfVQygoXLtmaYA0BrbW_6BkR',
+    url:     audioURL('1iiAgY9DqRfVQygoXLtmaYA0BrbW_6BkR'),
     label:   'Запись 4 из 4',
     quality: 'good',
   },
@@ -574,9 +539,7 @@ const trialPracticeDone = {
   choices: ['Продолжить →'],
 };
 
-// ================================================================
-// ЗАПУСК
-// ================================================================
+// ── Запуск ────────────────────────────────────────────────────────
 jsPsych.run([
   trialLoading,
   trialAssigned,
