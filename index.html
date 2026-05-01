@@ -128,6 +128,9 @@
 const GAS_URL  = 'https://script.google.com/macros/s/AKfycbxQ04SXN7KwFAFBt-bJcUyruT2fuTRqwyIkoY9WLUvJ_qiuSRHaesJyjl3zazstniaw7g/exec';
 const BIBD_URL = './bibd_assignments.json';
 
+// Тестовый режим: ?debug=1 пропускает загрузку и берёт первый стимул
+const DEBUG = new URLSearchParams(window.location.search).get('debug') === '1';
+
 const SESSION = {
   participant_id: null,
   bibd_key:       null,
@@ -202,28 +205,29 @@ function showError(msg) {
     '</div></div>';
 }
 
-// ================================================================
-// ГЛАВНАЯ ФУНКЦИЯ ИНИЦИАЛИЗАЦИИ
-// Сначала загружаем все данные, потом запускаем jsPsych
-// ================================================================
 async function init() {
   try {
-    // Шаг 1: назначаем участника
-    var res = await gasGet('assign');
-    SESSION.participant_id = res.participant_id;
-    SESSION.bibd_key       = res.bibd_key;
-    SESSION.survey_set     = parseInt(res.bibd_key.replace('P', ''), 10);
-
-    // Шаг 2: загружаем BIBD
-    var bibd = await fetchJSON(BIBD_URL);
-    if (!bibd[SESSION.bibd_key]) {
-      throw new Error('Набор ' + SESSION.bibd_key + ' не найден в BIBD');
+    if (DEBUG) {
+      // Тестовый режим — не назначаем участника, берём первый стимул
+      SESSION.participant_id = 'DEBUG';
+      SESSION.bibd_key       = 'P01';
+      SESSION.survey_set     = 1;
+      SESSION.screening      = { native: 'yes', hearing: 'no', device: 'headphones', age: '25', expert: 'no' };
+      var bibd = await fetchJSON(BIBD_URL);
+      SESSION.stimuli = bibd['P01'].slice(0, 1);
+    } else {
+      var res = await gasGet('assign');
+      SESSION.participant_id = res.participant_id;
+      SESSION.bibd_key       = res.bibd_key;
+      SESSION.survey_set     = parseInt(res.bibd_key.replace('P', ''), 10);
+      var bibd = await fetchJSON(BIBD_URL);
+      if (!bibd[SESSION.bibd_key]) {
+        throw new Error('Набор ' + SESSION.bibd_key + ' не найден в BIBD');
+      }
+      SESSION.stimuli = bibd[SESSION.bibd_key];
     }
-    SESSION.stimuli = bibd[SESSION.bibd_key];
 
-    // Шаг 3: запускаем jsPsych с полным таймлайном
     startExperiment();
-
   } catch (err) {
     showError(err.message);
   }
@@ -236,18 +240,68 @@ function startExperiment() {
     auto_update_progress_bar: true,
   });
 
-  // ── Подтверждение ───────────────────────────────────────────────
+  // ── Вспомогательные функции ────────────────────────────────────
+
+  function makeMosHTML(name) {
+    var html = '<div style="background:var(--surface);border:1px solid var(--border);' +
+      'border-radius:var(--r);padding:18px 20px;margin-bottom:14px">' +
+      '<p style="font-weight:600;margin-bottom:16px">Оцените естественность речи:</p>' +
+      '<div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">' +
+      '<span style="font-size:.78rem;color:var(--muted);max-width:80px;text-align:center;line-height:1.3">Очень<br>неестественно</span>';
+    for (var n = 1; n <= 5; n++) {
+      html += '<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer">' +
+        '<span style="font-family:var(--mono);font-size:.85rem;color:var(--muted)">' + n + '</span>' +
+        '<input type="radio" name="' + name + '" value="' + n + '" style="width:18px;height:18px;accent-color:var(--accent)">' +
+        '</label>';
+    }
+    html += '<span style="font-size:.78rem;color:var(--muted);max-width:80px;text-align:center;line-height:1.3">Очень<br>естественно</span>' +
+      '</div></div>';
+    return html;
+  }
+
+  function setupButton(btn) {
+    btn.disabled      = true;
+    btn.style.opacity = '0.4';
+    btn.style.cursor  = 'not-allowed';
+    return function unlock() {
+      btn.disabled      = false;
+      btn.style.opacity = '1';
+      btn.style.cursor  = 'pointer';
+    };
+  }
+
+  function setupAudioWithCounter(fileId, audioId, countId, hintId, onPlayed) {
+    var countEl   = document.getElementById(countId);
+    var hintEl    = document.getElementById(hintId);
+    var playsLeft = 2;
+
+    loadAudio(fileId, audioId).then(function() {
+      var audio = document.getElementById(audioId);
+      if (!audio) return;
+      audio.addEventListener('play', function() {
+        if (playsLeft > 0) {
+          playsLeft--;
+          if (countEl) countEl.textContent = playsLeft;
+          if (playsLeft === 0) {
+            audio.controls = false;
+            if (hintEl) hintEl.innerHTML = 'Лимит прослушиваний исчерпан.';
+          }
+          if (onPlayed) onPlayed();
+        }
+      });
+    });
+  }
+
+  // ── Подтверждение ──────────────────────────────────────────────
   var trialAssigned = {
     type: jsPsychHtmlButtonResponse,
-    stimulus: `
-      <h2>Всё готово</h2>
-      <p>Пожалуйста, не обновляйте страницу и не закрывайте
-         эту вкладку до завершения опроса — иначе прогресс
-         не сохранится.</p>`,
+    stimulus: '<h2>Всё готово</h2>' +
+      '<p>Пожалуйста, не обновляйте страницу и не закрывайте ' +
+      'эту вкладку до завершения опроса — иначе прогресс не сохранится.</p>',
     choices: ['Начать →'],
   };
 
-  // ── Скрининг ────────────────────────────────────────────────────
+  // ── Скрининг ───────────────────────────────────────────────────
   var trialScreening = {
     type: jsPsychHtmlButtonResponse,
     stimulus: `
@@ -325,82 +379,52 @@ function startExperiment() {
     on_finish: function () {},
   };
 
-  // ── Отсев ───────────────────────────────────────────────────────
+  // ── Отсев ──────────────────────────────────────────────────────
   var trialDisqualified = {
     type: jsPsychHtmlButtonResponse,
-    stimulus: `
-      <div style="text-align:center;padding:40px 0">
-        <h2>Спасибо за интерес</h2>
-        <p>К сожалению, вы не подходите под критерии участия в этом исследовании.</p>
-        <p style="color:var(--muted);margin-top:12px">
-          Для участия необходимо быть носителем русского языка и не иметь нарушений слуха.
-        </p>
-      </div>`,
+    stimulus: '<div style="text-align:center;padding:40px 0">' +
+      '<h2>Спасибо за интерес</h2>' +
+      '<p>К сожалению, вы не подходите под критерии участия в этом исследовании.</p>' +
+      '<p style="color:var(--muted);margin-top:12px">Для участия необходимо быть носителем русского языка и не иметь нарушений слуха.</p>' +
+      '</div>',
     choices: [],
   };
 
-  // ── Инструкция ──────────────────────────────────────────────────
+  // ── Инструкция ─────────────────────────────────────────────────
   var trialInstructions = {
     type: jsPsychInstructions,
     pages: [
-      `<h2>Добро пожаловать!</h2>
-       <p>Вы участвуете в исследовании компьютерного синтеза русской речи,
-          которое проводит кафедра фонетики СПбГУ.</p>
-       <p>Вам предстоит прослушать короткие аудиозаписи и оценить их качество.
-          Всего около 35 записей.</p>
-       <p>Время прохождения: <strong>20–25 минут</strong>.<br>
-          Пожалуйста, слушайте в наушниках или через внешние колонки в тихом помещении.</p>`,
+      '<h2>Добро пожаловать!</h2>' +
+      '<p>Вы участвуете в исследовании компьютерного синтеза русской речи, которое проводит кафедра фонетики СПбГУ.</p>' +
+      '<p>Вам предстоит прослушать короткие аудиозаписи и оценить их качество. Всего около 35 записей.</p>' +
+      '<p>Время прохождения: <strong>20–25 минут</strong>.<br>Пожалуйста, слушайте в наушниках или через внешние колонки в тихом помещении.</p>',
 
-      `<h2>Как оценивать</h2>
-       <p>Для каждой записи вы выставите оценку по пятибалльной шкале:</p>
-       <div style="background:var(--surface);border:1px solid var(--border);
-                   border-radius:var(--r);padding:20px;margin:16px 0">
-         <div style="display:grid;grid-template-columns:auto 1fr;gap:10px 16px;align-items:start">
-           <span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">5</span>
-           <span><strong>Очень естественно</strong> — практически как живая речь</span>
-           <span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">4</span>
-           <span><strong>Естественно</strong> — звучит хорошо, мелкие огрехи не мешают</span>
-           <span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">3</span>
-           <span><strong>Нейтрально</strong> — есть недостатки, но терпимо</span>
-           <span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">2</span>
-           <span><strong>Неестественно</strong> — заметные проблемы, мешающие восприятию</span>
-           <span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">1</span>
-           <span><strong>Очень неестественно</strong> — явные ошибки, слушать некомфортно</span>
-         </div>
-       </div>
-       <p>Оценивайте каждую запись <strong>независимо</strong>, не сравнивая с предыдущими.</p>`,
+      '<h2>Как оценивать</h2>' +
+      '<p>Для каждой записи вы выставите оценку по пятибалльной шкале:</p>' +
+      '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin:16px 0">' +
+      '<div style="display:grid;grid-template-columns:auto 1fr;gap:10px 16px;align-items:start">' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">5</span><span><strong>Очень естественно</strong> — практически как живая речь</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">4</span><span><strong>Естественно</strong> — звучит хорошо, мелкие огрехи не мешают</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">3</span><span><strong>Нейтрально</strong> — есть недостатки, но терпимо</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">2</span><span><strong>Неестественно</strong> — заметные проблемы, мешающие восприятию</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">1</span><span><strong>Очень неестественно</strong> — явные ошибки, слушать некомфортно</span>' +
+      '</div></div>' +
+      '<p>Оценивайте каждую запись <strong>независимо</strong>, не сравнивая с предыдущими.</p>',
 
-      `<h2>Важные правила</h2>
-       <div style="background:var(--surface);border:1px solid var(--border);
-                   border-radius:var(--r);padding:20px;margin:16px 0;
-                   display:flex;flex-direction:column;gap:14px">
-         <div style="display:flex;gap:12px;align-items:flex-start">
-           <span style="font-size:1.3rem">🎧</span>
-           <span>Каждую запись можно прослушать <strong>не более двух раз</strong>.
-                 После второго воспроизведения кнопка плеера заблокируется.</span>
-         </div>
-         <div style="display:flex;gap:12px;align-items:flex-start">
-           <span style="font-size:1.3rem">⏭️</span>
-           <span>Кнопка <strong>«Далее»</strong> становится активной только после того,
-                 как вы прослушали запись и выставили оценку.</span>
-         </div>
-         <div style="display:flex;gap:12px;align-items:flex-start">
-           <span style="font-size:1.3rem">💬</span>
-           <span>Для некоторых записей появится <strong>дополнительный вопрос</strong> —
-                 отвечайте по первому впечатлению.</span>
-         </div>
-         <div style="display:flex;gap:12px;align-items:flex-start">
-           <span style="font-size:1.3rem">🔄</span>
-           <span>Не обновляйте страницу — прогресс не сохраняется между сессиями.</span>
-         </div>
-       </div>`,
+      '<h2>Важные правила</h2>' +
+      '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin:16px 0;display:flex;flex-direction:column;gap:14px">' +
+      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">🎧</span><span>Каждую запись можно прослушать <strong>не более двух раз</strong>. После второго воспроизведения кнопка плеера заблокируется.</span></div>' +
+      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">⏭️</span><span>Кнопка <strong>«Далее»</strong> становится активной только после того, как вы прослушали запись и выставили оценку.</span></div>' +
+      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">💬</span><span>Для некоторых записей появится <strong>дополнительный вопрос</strong> — отвечайте по первому впечатлению.</span></div>' +
+      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">🔄</span><span>Не обновляйте страницу — прогресс не сохраняется между сессиями.</span></div>' +
+      '</div>',
     ],
     show_clickable_nav: true,
     button_label_next:     'Далее →',
     button_label_previous: '← Назад',
   };
 
-  // ── Пробный блок ────────────────────────────────────────────────
+  // ── Пробный блок ───────────────────────────────────────────────
   var PRACTICE_STIMULI = [
     { fileId: '11UXbG8RI5j0kD15fIEodMkxsfPRyXBDB', label: 'Запись 1 из 4', quality: 'bad'  },
     { fileId: '1oYpG5oJ6hgS8vyMlkHC6hYJ_2GNmPTSE', label: 'Запись 2 из 4', quality: 'good' },
@@ -410,81 +434,26 @@ function startExperiment() {
 
   var trialPracticeIntro = {
     type: jsPsychHtmlButtonResponse,
-    stimulus: `
-      <div style="text-align:center;padding:20px 0">
-        <h2>Пробный блок</h2>
-        <p>Перед началом основного теста вы прослушаете четыре записи в том же формате.</p>
-        <p>Оценивайте так же, как будете оценивать в основном блоке — по первому впечатлению.</p>
-      </div>`,
+    stimulus: '<div style="text-align:center;padding:20px 0">' +
+      '<h2>Пробный блок</h2>' +
+      '<p>Перед началом основного теста вы прослушаете четыре записи в том же формате.</p>' +
+      '<p>Оценивайте так же, как будете оценивать в основном блоке — по первому впечатлению.</p>' +
+      '</div>',
     choices: ['Начать →'],
   };
-
-  function makePracticeAudioHTML(idx, label) {
-    return '<div style="background:var(--acc-l);border:1px solid var(--border);' +
-      'border-radius:var(--r);padding:14px 18px;margin-bottom:20px;' +
-      'display:flex;align-items:center;gap:12px">' +
-      '<span style="font-family:var(--mono);font-size:.8rem;color:var(--accent);white-space:nowrap">' + label + '</span>' +
-      '<div style="flex:1;display:flex;flex-direction:column;gap:4px">' +
-      '<audio id="audio-practice-' + idx + '" controls style="width:100%;height:34px"></audio>' +
-      '<span class="audio-loading" id="loading-hint-audio-practice-' + idx + '">Загрузка аудио...</span>' +
-      '</div></div>';
-  }
-
-  function makeMosHTML(name) {
-    var html = '<div style="background:var(--surface);border:1px solid var(--border);' +
-      'border-radius:var(--r);padding:18px 20px;margin-bottom:14px">' +
-      '<p style="font-weight:600;margin-bottom:16px">Оцените естественность речи:</p>' +
-      '<div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">' +
-      '<span style="font-size:.78rem;color:var(--muted);max-width:80px;text-align:center;line-height:1.3">Очень<br>неестественно</span>';
-    for (var n = 1; n <= 5; n++) {
-      html += '<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer">' +
-        '<span style="font-family:var(--mono);font-size:.85rem;color:var(--muted)">' + n + '</span>' +
-        '<input type="radio" name="' + name + '" value="' + n + '" style="width:18px;height:18px;accent-color:var(--accent)">' +
-        '</label>';
-    }
-    html += '<span style="font-size:.78rem;color:var(--muted);max-width:80px;text-align:center;line-height:1.3">Очень<br>естественно</span>' +
-      '</div></div>';
-    return html;
-  }
-
-  function setupAudioWithCounter(fileId, audioId, countId, hintId, onPlayed) {
-    var countEl   = document.getElementById(countId);
-    var hintEl    = document.getElementById(hintId);
-    var playsLeft = 2;
-
-    loadAudio(fileId, audioId).then(function() {
-      var audio = document.getElementById(audioId);
-      if (!audio) return;
-      audio.addEventListener('play', function() {
-        if (playsLeft > 0) {
-          playsLeft--;
-          if (countEl) countEl.textContent = playsLeft;
-          if (playsLeft === 0) {
-            audio.controls = false;
-            if (hintEl) hintEl.innerHTML = 'Лимит прослушиваний исчерпан.';
-          }
-          if (onPlayed) onPlayed();
-        }
-      });
-    });
-  }
-
-  function setupButton(btn) {
-    btn.disabled      = true;
-    btn.style.opacity = '0.4';
-    btn.style.cursor  = 'not-allowed';
-    return function unlock() {
-      btn.disabled      = false;
-      btn.style.opacity = '1';
-      btn.style.cursor  = 'pointer';
-    };
-  }
 
   var practiceTrials = PRACTICE_STIMULI.map(function(stim, idx) {
     return {
       type: jsPsychHtmlButtonResponse,
       stimulus: function() {
-        return makePracticeAudioHTML(idx, stim.label) +
+        return '<div style="background:var(--acc-l);border:1px solid var(--border);' +
+          'border-radius:var(--r);padding:14px 18px;margin-bottom:20px;' +
+          'display:flex;align-items:center;gap:12px">' +
+          '<span style="font-family:var(--mono);font-size:.8rem;color:var(--accent);white-space:nowrap">' + stim.label + '</span>' +
+          '<div style="flex:1;display:flex;flex-direction:column;gap:4px">' +
+          '<audio id="audio-practice-' + idx + '" controls style="width:100%;height:34px"></audio>' +
+          '<span class="audio-loading" id="loading-hint-audio-practice-' + idx + '">Загрузка аудио...</span>' +
+          '</div></div>' +
           makeMosHTML('practice_mos_' + idx) +
           '<p style="font-size:.82rem;color:var(--muted);text-align:center" id="practice-hint-' + idx + '">' +
           'Прослушайте запись перед оценкой. Доступно прослушиваний: <strong id="practice-count-' + idx + '">2</strong></p>';
@@ -497,10 +466,8 @@ function startExperiment() {
         function tryUnlock() { if (played && rated) unlock(); }
 
         setupAudioWithCounter(
-          stim.fileId,
-          'audio-practice-' + idx,
-          'practice-count-' + idx,
-          'practice-hint-' + idx,
+          stim.fileId, 'audio-practice-' + idx,
+          'practice-count-' + idx, 'practice-hint-' + idx,
           function() { played = true; tryUnlock(); }
         );
 
@@ -519,20 +486,17 @@ function startExperiment() {
 
   var trialPracticeDone = {
     type: jsPsychHtmlButtonResponse,
-    stimulus: `
-      <div style="text-align:center;padding:30px 0">
-        <h2>Можно начинать</h2>
-        <p>Нажмите кнопку, чтобы перейти к основной части.</p>
-      </div>`,
+    stimulus: '<div style="text-align:center;padding:30px 0"><h2>Можно начинать</h2>' +
+      '<p>Нажмите кнопку, чтобы перейти к основной части.</p></div>',
     choices: ['Продолжить →'],
   };
 
-  // ── Основной блок MOS ───────────────────────────────────────────
+  // ── Основной блок MOS ──────────────────────────────────────────
   var mainTrials = SESSION.stimuli.slice(0, 1).map(function(stim, idx) {
-    var fileId     = extractFileId(stim.url);
-    var isDialogue = stim.block === 'dialogue';
-    var audioId    = 'audio-main-' + idx;
-    var total      = SESSION.stimuli.length;
+    var fileId      = extractFileId(stim.url);
+    var isDialogue  = stim.block === 'dialogue';
+    var audioId     = 'audio-main-' + idx;
+    var total       = SESSION.stimuli.length;
 
     return {
       type: jsPsychHtmlButtonResponse,
@@ -549,46 +513,33 @@ function startExperiment() {
 
         html += makeMosHTML('mos_' + idx);
 
-        // Диагностика (показывается при MOS ≤ 3)
         html += '<div class="diag-block" id="diag-block-' + idx + '">' +
           '<p>Что именно звучит неестественно? (можно выбрать несколько)</p>' +
-          ['Неправильное ударение в словах|ударение',
-           'Неестественный или неприятный тембр голоса|тембр',
-           'Резкие скачки или перепады голоса|скачки',
-           'Носовой / гнусавый оттенок|носовой',
-           'Нечёткое или смазанное произношение звуков|произношение',
-           'Неподходящая интонация|интонация',
-           'Посторонние шумы или артефакты записи|шумы'].map(function(pair) {
-            var parts = pair.split('|');
-            return '<label class="diag-option">' +
-              '<input type="checkbox" name="diag_' + idx + '" value="' + parts[1] + '">' +
-              parts[0] + '</label>';
+          [['Неправильное ударение в словах','ударение'],
+           ['Неестественный или неприятный тембр голоса','тембр'],
+           ['Резкие скачки или перепады голоса','скачки'],
+           ['Носовой / гнусавый оттенок','носовой'],
+           ['Нечёткое или смазанное произношение звуков','произношение'],
+           ['Неподходящая интонация','интонация'],
+           ['Посторонние шумы или артефакты записи','шумы']].map(function(pair) {
+            return '<label class="diag-option"><input type="checkbox" name="diag_' + idx + '" value="' + pair[1] + '">' + pair[0] + '</label>';
           }).join('') +
-          '<label class="diag-option">' +
-          '<input type="checkbox" name="diag_' + idx + '" value="другое" id="diag-other-cb-' + idx + '">' +
-          'Другое</label>' +
+          '<label class="diag-option"><input type="checkbox" name="diag_' + idx + '" value="другое" id="diag-other-cb-' + idx + '">Другое</label>' +
           '<input type="text" class="diag-other" id="diag-other-text-' + idx + '" placeholder="Опишите кратко...">' +
           '</div>';
 
-        // Функциональный тип (только для диалоговых)
         if (isDialogue) {
           html += '<div class="functype-block">' +
             '<p>Какой тип высказывания вы услышали?</p>' +
-            [['Вопрос','question'],
-             ['Краткий ответ','short_answer'],
-             ['Побуждение / просьба','imperative'],
-             ['Эмоциональная реплика','emotional'],
-             ['Дискурсивный маркер','discourse'],
-             ['Затрудняюсь определить','unknown']].map(function(pair) {
-              return '<label class="functype-option">' +
-                '<input type="radio" name="functype_' + idx + '" value="' + pair[1] + '">' +
-                pair[0] + '</label>';
+            [['Вопрос','question'],['Краткий ответ','short_answer'],
+             ['Побуждение / просьба','imperative'],['Эмоциональная реплика','emotional'],
+             ['Дискурсивный маркер','discourse'],['Затрудняюсь определить','unknown']].map(function(pair) {
+              return '<label class="functype-option"><input type="radio" name="functype_' + idx + '" value="' + pair[1] + '">' + pair[0] + '</label>';
             }).join('') + '</div>';
         }
 
         html += '<p style="font-size:.82rem;color:var(--muted);text-align:center" id="main-hint-' + idx + '">' +
-          'Прослушайте запись перед оценкой. Доступно прослушиваний: ' +
-          '<strong id="main-count-' + idx + '">2</strong></p>';
+          'Прослушайте запись перед оценкой. Доступно прослушиваний: <strong id="main-count-' + idx + '">2</strong></p>';
 
         return html;
       },
@@ -596,36 +547,48 @@ function startExperiment() {
       choices: ['Далее →'],
 
       on_load: function() {
-        var btn        = document.querySelector('.jspsych-btn');
-        var unlock     = setupButton(btn);
-        var played     = false;
-        var rated      = false;
+        var btn         = document.querySelector('.jspsych-btn');
+        var unlock      = setupButton(btn);
+        var played      = false;
+        var rated       = false;
         var hasFunctype = !isDialogue;
+
+        var currentMos      = null;
+        var currentDiag     = [];
+        var currentFunctype = null;
 
         function tryUnlock() { if (played && rated && hasFunctype) unlock(); }
 
         setupAudioWithCounter(
           fileId, audioId,
-          'main-count-' + idx,
-          'main-hint-' + idx,
+          'main-count-' + idx, 'main-hint-' + idx,
           function() { played = true; tryUnlock(); }
         );
 
-        // MOS + диагностика
         document.querySelectorAll('input[name="mos_' + idx + '"]').forEach(function(r) {
           r.addEventListener('change', function() {
+            currentMos = parseInt(this.value);
             rated = true;
             var diagBlock = document.getElementById('diag-block-' + idx);
-            if (parseInt(this.value) <= 3) {
+            if (currentMos <= 3) {
               diagBlock.classList.add('visible');
             } else {
               diagBlock.classList.remove('visible');
+              currentDiag = [];
             }
             tryUnlock();
           });
         });
 
-        // Поле "Другое"
+        document.querySelectorAll('[name="diag_' + idx + '"]').forEach(function(cb) {
+          cb.addEventListener('change', function() {
+            currentDiag = [];
+            document.querySelectorAll('input[name="diag_' + idx + '"]:checked').forEach(function(c) {
+              currentDiag.push(c.value);
+            });
+          });
+        });
+
         var otherCb  = document.getElementById('diag-other-cb-' + idx);
         var otherTxt = document.getElementById('diag-other-text-' + idx);
         if (otherCb && otherTxt) {
@@ -634,28 +597,34 @@ function startExperiment() {
           });
         }
 
-        // Функциональный тип
         if (isDialogue) {
           document.querySelectorAll('input[name="functype_' + idx + '"]').forEach(function(r) {
-            r.addEventListener('change', function() { hasFunctype = true; tryUnlock(); });
+            r.addEventListener('change', function() {
+              currentFunctype = this.value;
+              hasFunctype = true;
+              tryUnlock();
+            });
           });
         }
+
+        SESSION['_trial_' + idx] = {
+          getMos:      function() { return currentMos; },
+          getDiag:     function() {
+            var d = currentDiag.slice();
+            if (otherTxt && otherTxt.value.trim() && otherCb && otherCb.checked) {
+              d.push('другое: ' + otherTxt.value.trim());
+            }
+            return d;
+          },
+          getFunctype: function() { return currentFunctype; },
+        };
       },
 
       on_finish: function() {
-        var mosSel   = document.querySelector('input[name="mos_' + idx + '"]:checked');
-        var mosScore = mosSel ? parseInt(mosSel.value) : null;
-
-        var diagnostics = [];
-        document.querySelectorAll('input[name="diag_' + idx + '"]:checked').forEach(function(cb) {
-          diagnostics.push(cb.value);
-        });
-        var otherTxt = document.getElementById('diag-other-text-' + idx);
-        if (otherTxt && otherTxt.value.trim()) {
-          diagnostics.push('другое: ' + otherTxt.value.trim());
-        }
-
-        var functypeSel = document.querySelector('input[name="functype_' + idx + '"]:checked');
+        var saved          = SESSION['_trial_' + idx];
+        var mosScore       = saved ? saved.getMos()      : null;
+        var diagnostics    = saved ? saved.getDiag()     : [];
+        var functypeAnswer = saved ? saved.getFunctype() : null;
 
         SESSION.responses.push({
           participant_id:   SESSION.participant_id,
@@ -668,62 +637,60 @@ function startExperiment() {
           order:            stim.order,
           mos_score:        mosScore,
           diagnostics:      diagnostics,
-          func_type_answer: functypeSel ? functypeSel.value : null,
+          func_type_answer: functypeAnswer,
           is_anchor:        false,
           anchor_type:      '',
         });
+
+        delete SESSION['_trial_' + idx];
       },
     };
   });
 
-  // ── Завершение ──────────────────────────────────────────────────
+  // ── Завершение ─────────────────────────────────────────────────
   var trialGoodbye = {
     type: jsPsychHtmlButtonResponse,
-    stimulus: `
-      <div style="text-align:center;padding:40px 0">
-        <h2>Спасибо за участие!</h2>
-        <p>Ваши ответы записаны. Страницу можно закрыть.</p>
-        <p style="color:var(--muted);font-size:.9rem;margin-top:16px">
-          Исследование проводит кафедра фонетики СПбГУ.
-        </p>
-      </div>`,
+    stimulus: '<div style="text-align:center;padding:40px 0">' +
+      '<h2>Спасибо за участие!</h2>' +
+      '<p>Ваши ответы записаны. Страницу можно закрыть.</p>' +
+      '<p style="color:var(--muted);font-size:.9rem;margin-top:16px">Исследование проводит кафедра фонетики СПбГУ.</p>' +
+      '</div>',
     choices: [],
     on_load: async function() {
       await sendResults();
     },
   };
 
-  // ── Запуск ──────────────────────────────────────────────────────
-  jsPsych.run([
-    trialAssigned,
-    trialScreening,
-
-    {
-      timeline: [trialDisqualified],
-      conditional_function: function() {
-        return SESSION.screening.native  === 'no' ||
-               SESSION.screening.hearing === 'yes';
+  // ── Запуск ─────────────────────────────────────────────────────
+  if (DEBUG) {
+    // В тестовом режиме сразу к основному блоку
+    jsPsych.run(mainTrials.concat([trialGoodbye]));
+  } else {
+    jsPsych.run([
+      trialAssigned,
+      trialScreening,
+      {
+        timeline: [trialDisqualified],
+        conditional_function: function() {
+          return SESSION.screening.native  === 'no' ||
+                 SESSION.screening.hearing === 'yes';
+        },
       },
-    },
-
-    {
-      timeline: [
-        trialInstructions,
-        trialPracticeIntro,
-      ].concat(practiceTrials).concat([
-        trialPracticeDone,
-      ]).concat(mainTrials).concat([
-        trialGoodbye,
-      ]),
-      conditional_function: function() {
-        return SESSION.screening.native  === 'yes' &&
-               SESSION.screening.hearing === 'no';
+      {
+        timeline: [trialInstructions, trialPracticeIntro]
+          .concat(practiceTrials)
+          .concat([trialPracticeDone])
+          .concat(mainTrials)
+          .concat([trialGoodbye]),
+        conditional_function: function() {
+          return SESSION.screening.native  === 'yes' &&
+                 SESSION.screening.hearing === 'no';
+        },
       },
-    },
-  ]);
+    ]);
+  }
 }
 
-// Запускаем инициализацию
 init();
 </script>
 </body>
