@@ -87,6 +87,12 @@
     .full-box { text-align: center; padding: 60px 20px; }
     .full-box h2 { font-size: 1.5rem; margin-bottom: 12px; }
     .full-box p  { color: var(--muted); }
+
+    .audio-loading {
+      font-size: .82rem;
+      color: var(--muted);
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -120,15 +126,19 @@ async function gasGet(action) {
   return fetchJSON(GAS_URL + '?action=' + action);
 }
 
+// Загружает аудио через GAS-прокси (base64) и вставляет в элемент
 async function loadAudio(fileId, audioElementId) {
   try {
-    const url = GAS_URL + '?action=audio&id=' + fileId;
-    const r   = await fetch(url);
-    const b64 = await r.text();
-    const el  = document.getElementById(audioElementId);
+    const url  = GAS_URL + '?action=audio&id=' + fileId;
+    const r    = await fetch(url);
+    const b64  = await r.text();
+    const el   = document.getElementById(audioElementId);
     if (el) {
       el.src = 'data:audio/wav;base64,' + b64;
       el.load();
+      // Убираем индикатор загрузки
+      const hint = document.getElementById('loading-hint-' + audioElementId);
+      if (hint) hint.style.display = 'none';
     }
   } catch (err) {
     console.error('Ошибка загрузки аудио:', err);
@@ -292,7 +302,7 @@ const trialScreening = {
   on_finish: function () {},
 };
 
-// ── Блок 4. Отсев ────────────────────────────────────────────────
+// ── Блок 4. Отсев ─────────────────────────────────────────────────
 const trialDisqualified = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
@@ -390,26 +400,10 @@ const trialInstructions = {
 
 // ── Блок 6. Пробный блок ─────────────────────────────────────────
 const PRACTICE_STIMULI = [
-  {
-    fileId:  '11UXbG8RI5j0kD15fIEodMkxsfPRyXBDB',
-    label:   'Запись 1 из 4',
-    quality: 'bad',
-  },
-  {
-    fileId:  '1oYpG5oJ6hgS8vyMlkHC6hYJ_2GNmPTSE',
-    label:   'Запись 2 из 4',
-    quality: 'good',
-  },
-  {
-    fileId:  '120cTFpIvUaL_EiPXNH8ni59DJD2npwNb',
-    label:   'Запись 3 из 4',
-    quality: 'bad',
-  },
-  {
-    fileId:  '1iiAgY9DqRfVQygoXLtmaYA0BrbW_6BkR',
-    label:   'Запись 4 из 4',
-    quality: 'good',
-  },
+  { fileId: '11UXbG8RI5j0kD15fIEodMkxsfPRyXBDB', label: 'Запись 1 из 4', quality: 'bad'  },
+  { fileId: '1oYpG5oJ6hgS8vyMlkHC6hYJ_2GNmPTSE', label: 'Запись 2 из 4', quality: 'good' },
+  { fileId: '120cTFpIvUaL_EiPXNH8ni59DJD2npwNb',  label: 'Запись 3 из 4', quality: 'bad'  },
+  { fileId: '1iiAgY9DqRfVQygoXLtmaYA0BrbW_6BkR',  label: 'Запись 4 из 4', quality: 'good' },
 ];
 
 const trialPracticeIntro = {
@@ -438,10 +432,17 @@ function buildPracticeTrials() {
                          color:var(--accent);white-space:nowrap">
               ${stim.label}
             </span>
-            <audio id="practice-audio-${idx}" controls
-                   style="flex:1;height:34px">
-            </audio>
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+              <audio id="audio-practice-${idx}" controls
+                     style="width:100%;height:34px">
+              </audio>
+              <span class="audio-loading"
+                    id="loading-hint-audio-practice-${idx}">
+                Загрузка аудио...
+              </span>
+            </div>
           </div>
+
           <div style="background:var(--surface);border:1px solid var(--border);
                       border-radius:var(--r);padding:18px 20px;margin-bottom:14px">
             <p style="font-weight:600;margin-bottom:16px">
@@ -471,6 +472,7 @@ function buildPracticeTrials() {
               </span>
             </div>
           </div>
+
           <p style="font-size:.82rem;color:var(--muted);text-align:center"
              id="practice-hint-${idx}">
             Прослушайте запись перед оценкой.
@@ -482,9 +484,8 @@ function buildPracticeTrials() {
       choices: ['Далее →'],
 
       on_load: function() {
+        var audioId = 'audio-practice-' + idx;
         var btn     = document.querySelector('.jspsych-btn');
-        loadAudio('${stim.fileId}', 'practice-audio-${idx}');
-        var audio   = document.getElementById('practice-audio-' + idx);
         var countEl = document.getElementById('practice-count-' + idx);
         var hintEl  = document.getElementById('practice-hint-' + idx);
 
@@ -504,17 +505,23 @@ function buildPracticeTrials() {
           }
         }
 
-        audio.addEventListener('play', function() {
-          if (playsLeft > 0) {
-            playsLeft--;
-            hasPlayed = true;
-            countEl.textContent = playsLeft;
-            if (playsLeft === 0) {
-              audio.controls = false;
-              hintEl.innerHTML = 'Лимит прослушиваний исчерпан.';
+        // Загружаем аудио через прокси
+        loadAudio(stim.fileId, audioId).then(function() {
+          var audio = document.getElementById(audioId);
+          if (!audio) return;
+
+          audio.addEventListener('play', function() {
+            if (playsLeft > 0) {
+              playsLeft--;
+              hasPlayed = true;
+              countEl.textContent = playsLeft;
+              if (playsLeft === 0) {
+                audio.controls = false;
+                hintEl.innerHTML = 'Лимит прослушиваний исчерпан.';
+              }
+              tryUnlock();
             }
-            tryUnlock();
-          }
+          });
         });
 
         document.querySelectorAll(
