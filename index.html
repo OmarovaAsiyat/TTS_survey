@@ -178,9 +178,11 @@ const trialLoading = {
       if (!bibd[SESSION.participant_id]) {
         throw new Error('Набор для ' + SESSION.participant_id + ' не найден');
       }
-// bibd_key — базовый набор P01..P50, participant_id может быть P01_2 и т.д.
-const bidbKey = assignResult.bibd_key || SESSION.participant_id.replace(/_\d+$/, '');
+const bidbKey = SESSION.participant_id.replace(/_\d+$/, '');
 SESSION.stimuli = bibd[bidbKey];
+if (!SESSION.stimuli) {
+  throw new Error('Набор для ' + bidbKey + ' не найден');
+}
       jsPsych.finishTrial();
 
     } catch (err) {
