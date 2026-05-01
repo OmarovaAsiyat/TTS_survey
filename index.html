@@ -175,8 +175,9 @@ async function loadAudio(fileId, audioElementId) {
 async function sendResults() {
   try {
     await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method:  'POST',
+      mode:    'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({
         action:         'save',
         participant_id: SESSION.participant_id,
@@ -186,6 +187,7 @@ async function sendResults() {
         data:           SESSION.responses,
       }),
     });
+    console.log('Результаты отправлены');
   } catch (err) {
     console.error('Ошибка отправки:', err);
   }
