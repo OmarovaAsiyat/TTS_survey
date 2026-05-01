@@ -120,8 +120,19 @@ async function gasGet(action) {
   return fetchJSON(GAS_URL + '?action=' + action);
 }
 
-function audioURL(fileId) {
-  return GAS_URL + '?action=audio&id=' + fileId;
+async function loadAudio(fileId, audioElementId) {
+  try {
+    const url = GAS_URL + '?action=audio&id=' + fileId;
+    const r   = await fetch(url);
+    const b64 = await r.text();
+    const el  = document.getElementById(audioElementId);
+    if (el) {
+      el.src = 'data:audio/wav;base64,' + b64;
+      el.load();
+    }
+  } catch (err) {
+    console.error('Ошибка загрузки аудио:', err);
+  }
 }
 
 const jsPsych = initJsPsych({
@@ -380,22 +391,22 @@ const trialInstructions = {
 // ── Блок 6. Пробный блок ─────────────────────────────────────────
 const PRACTICE_STIMULI = [
   {
-    url:     audioURL('11UXbG8RI5j0kD15fIEodMkxsfPRyXBDB'),
+    fileId:  '11UXbG8RI5j0kD15fIEodMkxsfPRyXBDB',
     label:   'Запись 1 из 4',
     quality: 'bad',
   },
   {
-    url:     audioURL('1oYpG5oJ6hgS8vyMlkHC6hYJ_2GNmPTSE'),
+    fileId:  '1oYpG5oJ6hgS8vyMlkHC6hYJ_2GNmPTSE',
     label:   'Запись 2 из 4',
     quality: 'good',
   },
   {
-    url:     audioURL('120cTFpIvUaL_EiPXNH8ni59DJD2npwNb'),
+    fileId:  '120cTFpIvUaL_EiPXNH8ni59DJD2npwNb',
     label:   'Запись 3 из 4',
     quality: 'bad',
   },
   {
-    url:     audioURL('1iiAgY9DqRfVQygoXLtmaYA0BrbW_6BkR'),
+    fileId:  '1iiAgY9DqRfVQygoXLtmaYA0BrbW_6BkR',
     label:   'Запись 4 из 4',
     quality: 'good',
   },
@@ -427,9 +438,8 @@ function buildPracticeTrials() {
                          color:var(--accent);white-space:nowrap">
               ${stim.label}
             </span>
-            <audio id="practice-audio-${idx}" controls preload="auto"
+            <audio id="practice-audio-${idx}" controls
                    style="flex:1;height:34px">
-              <source src="${stim.url}" type="audio/wav">
             </audio>
           </div>
           <div style="background:var(--surface);border:1px solid var(--border);
@@ -473,6 +483,7 @@ function buildPracticeTrials() {
 
       on_load: function() {
         var btn     = document.querySelector('.jspsych-btn');
+        loadAudio('${stim.fileId}', 'practice-audio-${idx}');
         var audio   = document.getElementById('practice-audio-' + idx);
         var countEl = document.getElementById('practice-count-' + idx);
         var hintEl  = document.getElementById('practice-hint-' + idx);
