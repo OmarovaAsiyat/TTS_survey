@@ -525,7 +525,7 @@ function startExperiment() {
   };
 
   // ── Основной блок MOS ───────────────────────────────────────────
-  var mainTrials = SESSION.stimuli.map(function(stim, idx) {
+  var mainTrials = SESSION.stimuli.slice(0, 1).map(function(stim, idx) {
     var fileId     = extractFileId(stim.url);
     var isDialogue = stim.block === 'dialogue';
     var audioId    = 'audio-main-' + idx;
