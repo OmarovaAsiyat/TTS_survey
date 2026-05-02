@@ -36,7 +36,6 @@
       line-height: 1.6;
     }
 
-    /* Прогресс-бар jsPsych — скрываем полностью */
     .jspsych-progressbar-container { display: none !important; }
 
     #jspsych-target {
@@ -81,7 +80,6 @@
 
     .audio-loading { font-size: .82rem; color: var(--muted); font-style: italic; }
 
-    /* MOS шкала */
     .mos-wrap {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -126,7 +124,6 @@
       accent-color: var(--accent);
     }
 
-    /* Динамическая подсказка MOS */
     .mos-hint {
       min-height: 22px;
       text-align: center;
@@ -136,7 +133,6 @@
       transition: opacity .2s;
     }
 
-    /* Диагностика */
     .diag-block {
       display: none;
       background: #fff8e1;
@@ -158,7 +154,6 @@
       border-radius: var(--r); display: none;
     }
 
-    /* Контекст диалоговой реплики */
     .context-block {
       background: var(--acc-l);
       border: 1px solid var(--border);
@@ -170,19 +165,6 @@
     .context-option {
       display: flex; align-items: center; gap: 8px;
       margin-bottom: 8px; font-size: .9rem; cursor: pointer;
-    }
-
-    /* Текст реплики */
-    .replica-text {
-      font-size: 1.1rem;
-      font-weight: 600;
-      text-align: center;
-      color: var(--text);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--r);
-      padding: 10px 18px;
-      margin-bottom: 14px;
     }
   </style>
 </head>
@@ -214,7 +196,6 @@ const SESSION = {
   },
 };
 
-// Описания оценок MOS
 const MOS_HINTS = {
   1: 'Очень неестественно — явные ошибки, слушать некомфортно',
   2: 'Неестественно — заметные проблемы, мешающие восприятию',
@@ -240,17 +221,15 @@ function extractFileId(url) {
 }
 
 async function loadAudio(fileId, audioId) {
-  try {
-    var r   = await fetch(GAS_URL + '?action=audio&id=' + fileId);
-    var b64 = await r.text();
-    var el  = document.getElementById(audioId);
-    if (el) {
-      el.src = 'data:audio/wav;base64,' + b64;
-      el.load();
-      var hint = document.getElementById('loading-hint-' + audioId);
-      if (hint) hint.style.display = 'none';
-    }
-  } catch (e) { console.error('Ошибка аудио:', e); }
+  var r   = await fetch(GAS_URL + '?action=audio&id=' + fileId);
+  var b64 = await r.text();
+  var el  = document.getElementById(audioId);
+  if (el) {
+    el.src = 'data:audio/wav;base64,' + b64;
+    el.load();
+    var hint = document.getElementById('loading-hint-' + audioId);
+    if (hint) hint.style.display = 'none';
+  }
 }
 
 async function sendResults() {
@@ -307,8 +286,6 @@ function startExperiment() {
     show_progress_bar: false,
   });
 
-  // ── Вспомогательные ────────────────────────────────────────────
-
   function setupButton(btn) {
     btn.disabled = true; btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed';
     return function() {
@@ -317,17 +294,31 @@ function startExperiment() {
   }
 
   function setupAudio(fileId, audioId, countId, hintId, onPlayed) {
-    var countEl = document.getElementById(countId);
-    var hintEl  = document.getElementById(hintId);
-    var left    = 2;
+    var hintEl = document.getElementById(hintId);
+    var left   = 2;
+
+    var skipBtn = '<button onclick="var b=document.querySelector(\'.jspsych-btn\');' +
+      'b.disabled=false;b.style.opacity=\'1\';b.style.cursor=\'pointer\';" ' +
+      'style="font-family:var(--mono);font-size:.82rem;color:var(--accent);' +
+      'background:none;border:1px solid var(--accent);border-radius:4px;' +
+      'cursor:pointer;padding:2px 8px;margin-left:6px">Пропустить</button>';
+
+    var skipTimer = setTimeout(function() {
+      var el = document.getElementById(audioId);
+      if (el && !el.src.startsWith('data:')) {
+        if (hintEl) hintEl.innerHTML = 'Аудио загружается дольше обычного. ' + skipBtn;
+      }
+    }, 10000);
 
     loadAudio(fileId, audioId).then(function() {
+      clearTimeout(skipTimer);
       var el = document.getElementById(audioId);
       if (!el) return;
       el.addEventListener('play', function() {
         if (left > 0) {
           left--;
-          if (countEl) countEl.textContent = left;
+          var c = document.getElementById(countId);
+          if (c) c.textContent = left;
           if (left === 0) {
             el.controls = false;
             if (hintEl) hintEl.innerHTML = 'Лимит прослушиваний исчерпан.';
@@ -336,18 +327,9 @@ function startExperiment() {
         }
       });
     }).catch(function() {
-      // Ошибка загрузки — показываем кнопку пропуска
-      if (hintEl) {
-        hintEl.innerHTML = 'Не удалось загрузить аудио. ' +
-          '<button onclick="document.querySelector(\'.jspsych-btn\').disabled=false;' +
-          'document.querySelector(\'.jspsych-btn\').style.opacity=\'1\';' +
-          'document.querySelector(\'.jspsych-btn\').style.cursor=\'pointer\';" ' +
-          'style="font-family:var(--mono);font-size:.82rem;color:var(--accent);' +
-          'background:none;border:none;cursor:pointer;text-decoration:underline;padding:0">' +
-          'Пропустить запись</button>';
-      }
+      clearTimeout(skipTimer);
+      if (hintEl) hintEl.innerHTML = 'Не удалось загрузить аудио. ' + skipBtn;
     });
-  });
   }
 
   function makeMosHTML(name) {
@@ -368,8 +350,8 @@ function startExperiment() {
   function bindMosHint(name) {
     document.querySelectorAll('input[name="' + name + '"]').forEach(function(r) {
       r.addEventListener('change', function() {
-        var hintEl = document.getElementById('hint-' + name);
-        if (hintEl) hintEl.textContent = MOS_HINTS[parseInt(this.value)] || '';
+        var h = document.getElementById('hint-' + name);
+        if (h) h.textContent = MOS_HINTS[parseInt(this.value)] || '';
       });
     });
   }
@@ -385,69 +367,39 @@ function startExperiment() {
   // ── Скрининг ───────────────────────────────────────────────────
   var trialScreening = {
     type: jsPsychHtmlButtonResponse,
-    stimulus: `
-      <h2>Несколько вопросов перед началом</h2>
-      <div style="background:var(--surface);border:1px solid var(--border);
-                  border-radius:var(--r);padding:20px;margin:16px 0">
+    stimulus: '<h2>Несколько вопросов перед началом</h2>' +
+      '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin:16px 0">' +
 
-        <p style="font-weight:600;margin-bottom:6px">
-          Является ли русский язык вашим родным (первым) языком?
-        </p>
-        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="radio" name="sc_native" value="yes"> Да
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="radio" name="sc_native" value="no"> Нет
-          </label>
-        </div>
+      '<p style="font-weight:600;margin-bottom:6px">Является ли русский язык вашим родным (первым) языком?</p>' +
+      '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="sc_native" value="yes"> Да</label>' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="sc_native" value="no"> Нет</label>' +
+      '</div>' +
 
-        <p style="font-weight:600;margin-bottom:6px">Есть ли у вас нарушения слуха?</p>
-        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="radio" name="sc_hearing" value="no"> Нет
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="radio" name="sc_hearing" value="yes"> Да
-          </label>
-        </div>
+      '<p style="font-weight:600;margin-bottom:6px">Есть ли у вас нарушения слуха?</p>' +
+      '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="sc_hearing" value="no"> Нет</label>' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="sc_hearing" value="yes"> Да</label>' +
+      '</div>' +
 
-        <p style="font-weight:600;margin-bottom:6px">Ваш возраст</p>
-        <input type="number" name="sc_age" min="1" max="99"
-               placeholder="Например, 23"
-               style="font-family:var(--mono);font-size:.95rem;
-                      padding:7px 10px;border:1px solid var(--border);
-                      border-radius:var(--r);width:120px;margin-bottom:20px">
+      '<p style="font-weight:600;margin-bottom:6px">Ваш возраст</p>' +
+      '<input type="number" name="sc_age" min="1" max="99" placeholder="Например, 23" ' +
+      'style="font-family:var(--mono);font-size:.95rem;padding:7px 10px;border:1px solid var(--border);border-radius:var(--r);width:120px;margin-bottom:20px">' +
 
-        <p style="font-weight:600;margin-bottom:6px">Что вы используете для прослушивания?</p>
-        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="radio" name="sc_device" value="headphones"> Наушники
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="radio" name="sc_device" value="speakers"> Внешние колонки
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="radio" name="sc_device" value="laptop"> Встроенные динамики ноутбука или телефона
-          </label>
-        </div>
+      '<p style="font-weight:600;margin-bottom:6px">Что вы используете для прослушивания?</p>' +
+      '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="sc_device" value="headphones"> Наушники</label>' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="sc_device" value="speakers"> Внешние колонки</label>' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="sc_device" value="laptop"> Встроенные динамики ноутбука или телефона</label>' +
+      '</div>' +
 
-        <p style="font-weight:600;margin-bottom:6px">
-          Есть ли у вас профессиональный опыт работы со звуком или речью?
-          <span style="font-weight:400;color:var(--muted)">
-            (лингвист, фонетист, логопед, актёр, диктор, звукорежиссёр,
-            переводчик-синхронист, преподаватель иностранных языков и т.п.)
-          </span>
-        </p>
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="radio" name="sc_expert" value="no"> Нет
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="radio" name="sc_expert" value="yes"> Да
-          </label>
-        </div>
-      </div>`,
+      '<p style="font-weight:600;margin-bottom:6px">Есть ли у вас профессиональный опыт работы со звуком или речью? ' +
+      '<span style="font-weight:400;color:var(--muted)">(лингвист, фонетист, логопед, актёр, диктор, звукорежиссёр, переводчик-синхронист, преподаватель иностранных языков и т.п.)</span></p>' +
+      '<div style="display:flex;flex-direction:column;gap:6px">' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="sc_expert" value="no"> Нет</label>' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="sc_expert" value="yes"> Да</label>' +
+      '</div></div>',
+
     choices: ['Продолжить →'],
     on_load: function() {
       ['sc_native','sc_hearing','sc_device','sc_expert'].forEach(function(name) {
@@ -458,9 +410,7 @@ function startExperiment() {
         });
       });
       var ageEl = document.querySelector('[name="sc_age"]');
-      if (ageEl) ageEl.addEventListener('input', function() {
-        SESSION.screening.age = this.value;
-      });
+      if (ageEl) ageEl.addEventListener('input', function() { SESSION.screening.age = this.value; });
     },
     on_finish: function() {},
   };
@@ -490,28 +440,19 @@ function startExperiment() {
       '<h2>Добро пожаловать!</h2>' +
       '<p>Вы участвуете в исследовании систем синтеза речи.</p>' +
       '<p>Вам предстоит прослушать короткие аудиозаписи и оценить их качество. Всего около 35 записей.</p>' +
-      '<p>Время прохождения: <strong>20–25 минут</strong>.<br>' +
-      'Пожалуйста, слушайте в наушниках или через внешние колонки в тихом помещении.</p>',
+      '<p>Время прохождения: <strong>20–25 минут</strong>.<br>Пожалуйста, слушайте в наушниках или через внешние колонки в тихом помещении.</p>',
 
       '<h2>Как оценивать</h2>' +
       '<p>Для каждой записи вы выставите оценку от 1 до 5:</p>' +
       '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin:16px 0">' +
       '<div style="display:grid;grid-template-columns:auto 1fr;gap:10px 16px;align-items:start">' +
-      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">5</span>' +
-      '<span><strong>Очень естественно</strong> — практически как живая речь</span>' +
-      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">4</span>' +
-      '<span><strong>Естественно</strong> — звучит хорошо, мелкие огрехи не мешают</span>' +
-      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">3</span>' +
-      '<span><strong>Нейтрально</strong> — есть недостатки, но терпимо</span>' +
-      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">2</span>' +
-      '<span><strong>Неестественно</strong> — заметные проблемы, мешающие восприятию</span>' +
-      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">1</span>' +
-      '<span><strong>Очень неестественно</strong> — явные ошибки, слушать некомфортно</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">5</span><span><strong>Очень естественно</strong> — практически как живая речь</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">4</span><span><strong>Естественно</strong> — звучит хорошо, мелкие огрехи не мешают</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">3</span><span><strong>Нейтрально</strong> — есть недостатки, но терпимо</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">2</span><span><strong>Неестественно</strong> — заметные проблемы, мешающие восприятию</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">1</span><span><strong>Очень неестественно</strong> — явные ошибки, слушать некомфортно</span>' +
       '</div></div>' +
-      '<p>Если вы поставите 3 балла или ниже, появится дополнительный вопрос о том, ' +
-      'что именно звучит неестественно. Это может быть: неправильное ударение, ' +
-      'неестественный тембр, роботизированность, неподходящая интонация, ' +
-      'неестественные паузы, посторонние шумы и другое.</p>' +
+      '<p>Если вы поставите 3 балла или ниже, появится дополнительный вопрос о том, что именно звучит неестественно.</p>' +
       '<p>Оценивайте каждую запись <strong>независимо</strong>, не сравнивая с предыдущими.</p>',
 
       '<h2>Важные правила</h2>' +
@@ -544,8 +485,7 @@ function startExperiment() {
     stimulus: '<div style="text-align:center;padding:20px 0">' +
       '<h2>Пробный блок</h2>' +
       '<p>Перед началом вы прослушаете четыре записи в том же формате.</p>' +
-      '<p>Оценивайте по первому впечатлению.</p>' +
-      '</div>',
+      '<p>Оценивайте по первому впечатлению.</p></div>',
     choices: ['Начать →'],
   };
 
@@ -610,56 +550,37 @@ function startExperiment() {
     return {
       type: jsPsychHtmlButtonResponse,
       stimulus: function() {
-        // Плеер
         var html = '<div style="background:var(--acc-l);border:1px solid var(--border);' +
-          'border-radius:var(--r);padding:14px 18px;margin-bottom:' + (isDialogue ? '10px' : '20px') + ';' +
+          'border-radius:var(--r);padding:14px 18px;margin-bottom:20px;' +
           'display:flex;align-items:center;gap:12px">' +
           '<span style="font-family:var(--mono);font-size:.78rem;color:var(--accent);white-space:nowrap">' +
           (idx + 1) + ' / ' + total + '</span>' +
           '<div style="flex:1;display:flex;flex-direction:column;gap:4px">' +
           '<audio id="' + aId + '" controls style="width:100%;height:34px"></audio>' +
           '<span class="audio-loading" id="loading-hint-' + aId + '">Загрузка аудио...</span>' +
-          '</div>' +
-          '<button id="skip-btn-' + idx + '" ' +
-          'onclick="var b=document.querySelector(\'.jspsych-btn\');b.disabled=false;b.style.opacity=\'1\';b.style.cursor=\'pointer\';" ' +
-          'style="font-family:var(--mono);font-size:.75rem;color:var(--muted);background:none;' +
-          'border:none;cursor:pointer;text-decoration:underline;padding:0;white-space:nowrap">' +
-          'Пропустить при ошибке загрузки</button>' +
-          '</div>';
+          '</div></div>';
 
-        // Текст реплики для диалоговых
-        if (isDialogue && stim.text) {
-          html += '<div class="replica-text">' + stim.text + '</div>';
-        }
-
-        // MOS шкала
         html += makeMosHTML(mosName);
 
-        // Диагностика (показывается при MOS ≤ 3)
         html += '<div class="diag-block" id="diag-' + idx + '">' +
           '<p>Что именно звучит неестественно? (можно выбрать несколько)</p>' +
           [
-            ['Неправильное ударение в словах',           'ударение'],
-            ['Неправильные звуки в словах',              'звуки'],
-            ['Неестественный или неприятный тембр',      'тембр'],
-            ['Роботизированность, отсутствие эмоций',    'роботизированность'],
-            ['Неестественные паузы',                     'паузы'],
-            ['Резкие скачки интонации',                  'скачки'],
-            ['Неподходящая интонация',                   'интонация'],
-            ['Носовой или гнусавый оттенок голоса',      'носовой'],
-            ['Посторонние шумы или помехи в записи',     'шумы'],
+            ['Неправильное ударение в словах',        'ударение'],
+            ['Неправильные звуки в словах',           'звуки'],
+            ['Неестественный или неприятный тембр',   'тембр'],
+            ['Роботизированность, отсутствие эмоций', 'роботизированность'],
+            ['Неестественные паузы',                  'паузы'],
+            ['Резкие скачки интонации',               'скачки'],
+            ['Неподходящая интонация',                'интонация'],
+            ['Носовой или гнусавый оттенок голоса',   'носовой'],
+            ['Посторонние шумы или помехи в записи',  'шумы'],
           ].map(function(pair) {
-            return '<label class="diag-option">' +
-              '<input type="checkbox" name="diag_' + idx + '" value="' + pair[1] + '">' +
-              pair[0] + '</label>';
+            return '<label class="diag-option"><input type="checkbox" name="diag_' + idx + '" value="' + pair[1] + '">' + pair[0] + '</label>';
           }).join('') +
-          '<label class="diag-option">' +
-          '<input type="checkbox" name="diag_' + idx + '" value="другое" id="diag-other-cb-' + idx + '">' +
-          'Другое</label>' +
+          '<label class="diag-option"><input type="checkbox" name="diag_' + idx + '" value="другое" id="diag-other-cb-' + idx + '">Другое</label>' +
           '<input type="text" class="diag-other" id="diag-other-text-' + idx + '" placeholder="Опишите кратко...">' +
           '</div>';
 
-        // Контекст для диалоговых реплик
         if (isDialogue) {
           html += '<div class="context-block">' +
             '<p>Где вы могли бы услышать эту фразу?</p>' +
@@ -672,9 +593,7 @@ function startExperiment() {
               ['Как связку в разговоре («ну», «значит», «в общем»)', 'discourse'],
               ['Затрудняюсь определить',                             'unknown'],
             ].map(function(pair) {
-              return '<label class="context-option">' +
-                '<input type="radio" name="ctx_' + idx + '" value="' + pair[1] + '">' +
-                pair[0] + '</label>';
+              return '<label class="context-option"><input type="radio" name="ctx_' + idx + '" value="' + pair[1] + '">' + pair[0] + '</label>';
             }).join('') + '</div>';
         }
 
@@ -766,17 +685,17 @@ function startExperiment() {
         var ctx = t ? t.getCtx()  : null;
 
         SESSION.responses.push({
-          participant_id:   SESSION.participant_id,
-          bibd_key:         SESSION.bibd_key,
-          survey_set:       SESSION.survey_set,
-          timestamp:        new Date().toISOString(),
-          block:            stim.block,
-          text_id:          stim.text_id,
-          system:           stim.system,
-          order:            stim.order,
-          mos_score:        mos,
-          diagnostics:      dg,
-          func_type:   ctx,
+          participant_id: SESSION.participant_id,
+          bibd_key:       SESSION.bibd_key,
+          survey_set:     SESSION.survey_set,
+          timestamp:      new Date().toISOString(),
+          block:          stim.block,
+          text_id:        stim.text_id,
+          system:         stim.system,
+          order:          stim.order,
+          mos_score:      mos,
+          diagnostics:    dg,
+          func_type:      ctx,
         });
 
         delete SESSION['_t' + idx];
@@ -788,7 +707,7 @@ function startExperiment() {
   var trialGoodbye = {
     type: jsPsychHtmlButtonResponse,
     stimulus: '<div style="text-align:center;padding:40px 0">' +
-      '<img src="./image.png" alt="Вот Вам котик)" style="max-width:300px;border-radius:12px;margin-bottom:20px">' +
+      '<img src="./image.png" alt="котик" style="max-width:300px;border-radius:12px;margin-bottom:20px">' +
       '<h2>Спасибо за участие!</h2>' +
       '<p>Ваши ответы сохранены. Страницу можно закрыть.</p>' +
       '</div>',
