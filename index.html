@@ -287,7 +287,7 @@ async function init() {
       SESSION.survey_set     = 1;
       SESSION.screening      = { native: 'yes', hearing: 'no', device: 'headphones', age: '25', expert: 'no' };
       var bibd = await fetchJSON(BIBD_URL);
-      SESSION.stimuli = bibd['P01'].slice(0, 1);
+      SESSION.stimuli = bibd['P01'].slice(4, 6);
     } else {
       var res = await gasGet('assign');
       SESSION.participant_id = res.participant_id;
