@@ -36,6 +36,9 @@
       line-height: 1.6;
     }
 
+    /* Прогресс-бар jsPsych — скрываем полностью */
+    .jspsych-progressbar-container { display: none !important; }
+
     #jspsych-target {
       min-height: 100vh;
       display: flex;
@@ -46,11 +49,6 @@
 
     .jspsych-content-wrapper { width: 100%; max-width: 680px; }
     .jspsych-content          { max-width: 680px; }
-
-    .jspsych-progressbar-container { background: var(--border); height: 4px; }
-    .jspsych-progressbar-inner {
-      background: var(--accent); height: 4px; transition: width .3s;
-    }
 
     h2 { font-size: 1.3rem; font-weight: 600; margin-bottom: 14px; }
     p  { margin-bottom: 10px; }
@@ -83,10 +81,69 @@
 
     .audio-loading { font-size: .82rem; color: var(--muted); font-style: italic; }
 
+    /* MOS шкала */
+    .mos-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 18px 20px;
+      margin-bottom: 14px;
+    }
+
+    .mos-radios {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .mos-anchor {
+      font-size: .78rem;
+      color: var(--muted);
+      max-width: 80px;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    .mos-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .mos-item span {
+      font-family: var(--mono);
+      font-size: .85rem;
+      color: var(--muted);
+    }
+
+    .mos-item input[type="radio"] {
+      width: 18px; height: 18px;
+      accent-color: var(--accent);
+    }
+
+    /* Динамическая подсказка MOS */
+    .mos-hint {
+      min-height: 22px;
+      text-align: center;
+      font-size: .85rem;
+      color: var(--accent);
+      font-weight: 500;
+      transition: opacity .2s;
+    }
+
+    /* Диагностика */
     .diag-block {
       display: none;
-      background: #fff8e1; border: 1px solid #f0c040;
-      border-radius: var(--r); padding: 16px 18px; margin-top: 14px;
+      background: #fff8e1;
+      border: 1px solid #f0c040;
+      border-radius: var(--r);
+      padding: 16px 18px;
+      margin-top: 14px;
     }
     .diag-block.visible { display: block; }
     .diag-block p { font-weight: 600; font-size: .9rem; margin-bottom: 10px; }
@@ -101,14 +158,31 @@
       border-radius: var(--r); display: none;
     }
 
-    .functype-block {
-      background: var(--acc-l); border: 1px solid var(--border);
-      border-radius: var(--r); padding: 16px 18px; margin-top: 14px;
+    /* Контекст диалоговой реплики */
+    .context-block {
+      background: var(--acc-l);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 16px 18px;
+      margin-top: 14px;
     }
-    .functype-block p { font-weight: 600; font-size: .9rem; margin-bottom: 10px; }
-    .functype-option {
+    .context-block p { font-weight: 600; font-size: .9rem; margin-bottom: 10px; }
+    .context-option {
       display: flex; align-items: center; gap: 8px;
       margin-bottom: 8px; font-size: .9rem; cursor: pointer;
+    }
+
+    /* Текст реплики */
+    .replica-text {
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-align: center;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 10px 18px;
+      margin-bottom: 14px;
     }
   </style>
 </head>
@@ -118,8 +192,7 @@
     <div class="loading-box">
       <div class="spinner"></div>
       <h2>Подготовка...</h2>
-      <p>Загружаем материалы и назначаем персональный набор.<br>
-         Это займёт несколько секунд.</p>
+      <p>Загружаем материалы.<br>Это займёт несколько секунд.</p>
     </div>
   </div>
 </div>
@@ -127,9 +200,7 @@
 <script>
 const GAS_URL  = 'https://script.google.com/macros/s/AKfycbxQ04SXN7KwFAFBt-bJcUyruT2fuTRqwyIkoY9WLUvJ_qiuSRHaesJyjl3zazstniaw7g/exec';
 const BIBD_URL = './bibd_assignments.json';
-
-// Тестовый режим: ?debug=1 пропускает загрузку и берёт первый стимул
-const DEBUG = new URLSearchParams(window.location.search).get('debug') === '1';
+const DEBUG    = new URLSearchParams(window.location.search).get('debug') === '1';
 
 const SESSION = {
   participant_id: null,
@@ -141,6 +212,15 @@ const SESSION = {
     native: null, hearing: null,
     device: null, age: null, expert: null,
   },
+};
+
+// Описания оценок MOS
+const MOS_HINTS = {
+  1: 'Очень неестественно — явные ошибки, слушать некомфортно',
+  2: 'Неестественно — заметные проблемы, мешающие восприятию',
+  3: 'Нейтрально — есть недостатки, но терпимо',
+  4: 'Естественно — звучит хорошо, мелкие огрехи не мешают',
+  5: 'Очень естественно — практически как живая речь',
 };
 
 async function fetchJSON(url) {
@@ -155,32 +235,29 @@ async function gasGet(action) {
 
 function extractFileId(url) {
   if (!url) return null;
-  var match = url.match(/[?&]id=([^&]+)/);
-  return match ? match[1] : null;
+  var m = url.match(/[?&]id=([^&]+)/);
+  return m ? m[1] : null;
 }
 
-async function loadAudio(fileId, audioElementId) {
+async function loadAudio(fileId, audioId) {
   try {
     var r   = await fetch(GAS_URL + '?action=audio&id=' + fileId);
     var b64 = await r.text();
-    var el  = document.getElementById(audioElementId);
+    var el  = document.getElementById(audioId);
     if (el) {
       el.src = 'data:audio/wav;base64,' + b64;
       el.load();
-      var hint = document.getElementById('loading-hint-' + audioElementId);
+      var hint = document.getElementById('loading-hint-' + audioId);
       if (hint) hint.style.display = 'none';
     }
-  } catch (err) {
-    console.error('Ошибка загрузки аудио:', err);
-  }
+  } catch (e) { console.error('Ошибка аудио:', e); }
 }
 
 async function sendResults() {
   try {
-    console.log('Отправляем ответы:', JSON.stringify(SESSION.responses));
+    console.log('Отправляем:', JSON.stringify(SESSION.responses));
     await fetch(GAS_URL, {
-      method:  'POST',
-      mode:    'no-cors',
+      method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({
         action:         'save',
@@ -191,10 +268,7 @@ async function sendResults() {
         data:           SESSION.responses,
       }),
     });
-    console.log('Результаты отправлены');
-  } catch (err) {
-    console.error('Ошибка отправки:', err);
-  }
+  } catch (e) { console.error('Ошибка отправки:', e); }
 }
 
 function showError(msg) {
@@ -208,7 +282,6 @@ function showError(msg) {
 async function init() {
   try {
     if (DEBUG) {
-      // Тестовый режим — не назначаем участника, берём первый стимул
       SESSION.participant_id = 'DEBUG';
       SESSION.bibd_key       = 'P01';
       SESSION.survey_set     = 1;
@@ -221,69 +294,41 @@ async function init() {
       SESSION.bibd_key       = res.bibd_key;
       SESSION.survey_set     = parseInt(res.bibd_key.replace('P', ''), 10);
       var bibd = await fetchJSON(BIBD_URL);
-      if (!bibd[SESSION.bibd_key]) {
-        throw new Error('Набор ' + SESSION.bibd_key + ' не найден в BIBD');
-      }
+      if (!bibd[SESSION.bibd_key]) throw new Error('Набор ' + SESSION.bibd_key + ' не найден');
       SESSION.stimuli = bibd[SESSION.bibd_key];
     }
-
     startExperiment();
-  } catch (err) {
-    showError(err.message);
-  }
+  } catch (e) { showError(e.message); }
 }
 
 function startExperiment() {
   var jsPsych = initJsPsych({
-    display_element:          'jspsych-target',
-    show_progress_bar:        true,
-    auto_update_progress_bar: true,
+    display_element: 'jspsych-target',
+    show_progress_bar: false,
   });
 
-  // ── Вспомогательные функции ────────────────────────────────────
-
-  function makeMosHTML(name) {
-    var html = '<div style="background:var(--surface);border:1px solid var(--border);' +
-      'border-radius:var(--r);padding:18px 20px;margin-bottom:14px">' +
-      '<p style="font-weight:600;margin-bottom:16px">Оцените естественность речи:</p>' +
-      '<div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">' +
-      '<span style="font-size:.78rem;color:var(--muted);max-width:80px;text-align:center;line-height:1.3">Очень<br>неестественно</span>';
-    for (var n = 1; n <= 5; n++) {
-      html += '<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer">' +
-        '<span style="font-family:var(--mono);font-size:.85rem;color:var(--muted)">' + n + '</span>' +
-        '<input type="radio" name="' + name + '" value="' + n + '" style="width:18px;height:18px;accent-color:var(--accent)">' +
-        '</label>';
-    }
-    html += '<span style="font-size:.78rem;color:var(--muted);max-width:80px;text-align:center;line-height:1.3">Очень<br>естественно</span>' +
-      '</div></div>';
-    return html;
-  }
+  // ── Вспомогательные ────────────────────────────────────────────
 
   function setupButton(btn) {
-    btn.disabled      = true;
-    btn.style.opacity = '0.4';
-    btn.style.cursor  = 'not-allowed';
-    return function unlock() {
-      btn.disabled      = false;
-      btn.style.opacity = '1';
-      btn.style.cursor  = 'pointer';
+    btn.disabled = true; btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed';
+    return function() {
+      btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
     };
   }
 
-  function setupAudioWithCounter(fileId, audioId, countId, hintId, onPlayed) {
-    var countEl   = document.getElementById(countId);
-    var hintEl    = document.getElementById(hintId);
-    var playsLeft = 2;
-
+  function setupAudio(fileId, audioId, countId, hintId, onPlayed) {
+    var countEl = document.getElementById(countId);
+    var hintEl  = document.getElementById(hintId);
+    var left    = 2;
     loadAudio(fileId, audioId).then(function() {
-      var audio = document.getElementById(audioId);
-      if (!audio) return;
-      audio.addEventListener('play', function() {
-        if (playsLeft > 0) {
-          playsLeft--;
-          if (countEl) countEl.textContent = playsLeft;
-          if (playsLeft === 0) {
-            audio.controls = false;
+      var el = document.getElementById(audioId);
+      if (!el) return;
+      el.addEventListener('play', function() {
+        if (left > 0) {
+          left--;
+          if (countEl) countEl.textContent = left;
+          if (left === 0) {
+            el.controls = false;
             if (hintEl) hintEl.innerHTML = 'Лимит прослушиваний исчерпан.';
           }
           if (onPlayed) onPlayed();
@@ -292,12 +337,35 @@ function startExperiment() {
     });
   }
 
+  function makeMosHTML(name) {
+    return '<div class="mos-wrap">' +
+      '<p style="font-weight:600;margin-bottom:14px">Оцените естественность речи:</p>' +
+      '<div class="mos-radios">' +
+      '<span class="mos-anchor">Очень<br>неестественно</span>' +
+      [1,2,3,4,5].map(function(n) {
+        return '<label class="mos-item"><span>' + n + '</span>' +
+          '<input type="radio" name="' + name + '" value="' + n + '"></label>';
+      }).join('') +
+      '<span class="mos-anchor">Очень<br>естественно</span>' +
+      '</div>' +
+      '<div class="mos-hint" id="hint-' + name + '"></div>' +
+      '</div>';
+  }
+
+  function bindMosHint(name) {
+    document.querySelectorAll('input[name="' + name + '"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        var hintEl = document.getElementById('hint-' + name);
+        if (hintEl) hintEl.textContent = MOS_HINTS[parseInt(this.value)] || '';
+      });
+    });
+  }
+
   // ── Подтверждение ──────────────────────────────────────────────
   var trialAssigned = {
     type: jsPsychHtmlButtonResponse,
     stimulus: '<h2>Всё готово</h2>' +
-      '<p>Пожалуйста, не обновляйте страницу и не закрывайте ' +
-      'эту вкладку до завершения опроса — иначе прогресс не сохранится.</p>',
+      '<p>Не обновляйте страницу и не закрывайте вкладку до конца опроса — иначе прогресс не сохранится.</p>',
     choices: ['Начать →'],
   };
 
@@ -331,6 +399,13 @@ function startExperiment() {
           </label>
         </div>
 
+        <p style="font-weight:600;margin-bottom:6px">Ваш возраст</p>
+        <input type="number" name="sc_age" min="1" max="99"
+               placeholder="Например, 23"
+               style="font-family:var(--mono);font-size:.95rem;
+                      padding:7px 10px;border:1px solid var(--border);
+                      border-radius:var(--r);width:120px;margin-bottom:20px">
+
         <p style="font-weight:600;margin-bottom:6px">Что вы используете для прослушивания?</p>
         <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -344,16 +419,12 @@ function startExperiment() {
           </label>
         </div>
 
-        <p style="font-weight:600;margin-bottom:6px">Ваш возраст</p>
-        <input type="number" name="sc_age" min="16" max="99"
-               placeholder="Например, 23"
-               style="font-family:var(--mono);font-size:.95rem;
-                      padding:7px 10px;border:1px solid var(--border);
-                      border-radius:var(--r);width:120px;margin-bottom:20px">
-
         <p style="font-weight:600;margin-bottom:6px">
           Есть ли у вас профессиональный опыт работы со звуком или речью?
-          <span style="font-weight:400;color:var(--muted)">(лингвист, звукорежиссёр, логопед и т.п.)</span>
+          <span style="font-weight:400;color:var(--muted)">
+            (лингвист, фонетист, логопед, актёр, диктор, звукорежиссёр,
+            переводчик-синхронист, преподаватель иностранных языков и т.п.)
+          </span>
         </p>
         <div style="display:flex;flex-direction:column;gap:6px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -365,7 +436,7 @@ function startExperiment() {
         </div>
       </div>`,
     choices: ['Продолжить →'],
-    on_load: function () {
+    on_load: function() {
       ['sc_native','sc_hearing','sc_device','sc_expert'].forEach(function(name) {
         document.querySelectorAll('[name="' + name + '"]').forEach(function(el) {
           el.addEventListener('change', function() {
@@ -374,19 +445,28 @@ function startExperiment() {
         });
       });
       var ageEl = document.querySelector('[name="sc_age"]');
-      if (ageEl) ageEl.addEventListener('input', function() { SESSION.screening.age = this.value; });
+      if (ageEl) ageEl.addEventListener('input', function() {
+        SESSION.screening.age = this.value;
+      });
     },
-    on_finish: function () {},
+    on_finish: function() {},
   };
 
   // ── Отсев ──────────────────────────────────────────────────────
   var trialDisqualified = {
     type: jsPsychHtmlButtonResponse,
-    stimulus: '<div style="text-align:center;padding:40px 0">' +
-      '<h2>Спасибо за интерес</h2>' +
-      '<p>К сожалению, вы не подходите под критерии участия в этом исследовании.</p>' +
-      '<p style="color:var(--muted);margin-top:12px">Для участия необходимо быть носителем русского языка и не иметь нарушений слуха.</p>' +
-      '</div>',
+    stimulus: function() {
+      var s = SESSION.screening;
+      var reason = '';
+      if (s.native === 'no') reason = 'Для участия необходимо быть носителем русского языка.';
+      else if (s.hearing === 'yes') reason = 'Для участия необходимо не иметь нарушений слуха.';
+      else if (parseInt(s.age) < 18) reason = 'Для участия необходимо быть старше 18 лет.';
+      return '<div style="text-align:center;padding:40px 0">' +
+        '<h2>Спасибо за интерес</h2>' +
+        '<p>К сожалению, вы не подходите под критерии участия.</p>' +
+        '<p style="color:var(--muted);margin-top:12px">' + reason + '</p>' +
+        '</div>';
+    },
     choices: [],
   };
 
@@ -395,28 +475,42 @@ function startExperiment() {
     type: jsPsychInstructions,
     pages: [
       '<h2>Добро пожаловать!</h2>' +
-      '<p>Вы участвуете в исследовании компьютерного синтеза русской речи, которое проводит кафедра фонетики СПбГУ.</p>' +
+      '<p>Вы участвуете в исследовании систем синтеза речи.</p>' +
       '<p>Вам предстоит прослушать короткие аудиозаписи и оценить их качество. Всего около 35 записей.</p>' +
-      '<p>Время прохождения: <strong>20–25 минут</strong>.<br>Пожалуйста, слушайте в наушниках или через внешние колонки в тихом помещении.</p>',
+      '<p>Время прохождения: <strong>20–25 минут</strong>.<br>' +
+      'Пожалуйста, слушайте в наушниках или через внешние колонки в тихом помещении.</p>',
 
       '<h2>Как оценивать</h2>' +
-      '<p>Для каждой записи вы выставите оценку по пятибалльной шкале:</p>' +
+      '<p>Для каждой записи вы выставите оценку от 1 до 5:</p>' +
       '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin:16px 0">' +
       '<div style="display:grid;grid-template-columns:auto 1fr;gap:10px 16px;align-items:start">' +
-      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">5</span><span><strong>Очень естественно</strong> — практически как живая речь</span>' +
-      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">4</span><span><strong>Естественно</strong> — звучит хорошо, мелкие огрехи не мешают</span>' +
-      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">3</span><span><strong>Нейтрально</strong> — есть недостатки, но терпимо</span>' +
-      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">2</span><span><strong>Неестественно</strong> — заметные проблемы, мешающие восприятию</span>' +
-      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">1</span><span><strong>Очень неестественно</strong> — явные ошибки, слушать некомфортно</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">5</span>' +
+      '<span><strong>Очень естественно</strong> — практически как живая речь</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">4</span>' +
+      '<span><strong>Естественно</strong> — звучит хорошо, мелкие огрехи не мешают</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">3</span>' +
+      '<span><strong>Нейтрально</strong> — есть недостатки, но терпимо</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">2</span>' +
+      '<span><strong>Неестественно</strong> — заметные проблемы, мешающие восприятию</span>' +
+      '<span style="font-family:var(--mono);font-size:1.1rem;color:var(--accent);font-weight:600">1</span>' +
+      '<span><strong>Очень неестественно</strong> — явные ошибки, слушать некомфортно</span>' +
       '</div></div>' +
+      '<p>Если вы поставите 3 балла или ниже, появится дополнительный вопрос о том, ' +
+      'что именно звучит неестественно. Это может быть: неправильное ударение, ' +
+      'неестественный тембр, роботизированность, неподходящая интонация, ' +
+      'неестественные паузы, посторонние шумы и другое.</p>' +
       '<p>Оценивайте каждую запись <strong>независимо</strong>, не сравнивая с предыдущими.</p>',
 
       '<h2>Важные правила</h2>' +
       '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin:16px 0;display:flex;flex-direction:column;gap:14px">' +
-      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">🎧</span><span>Каждую запись можно прослушать <strong>не более двух раз</strong>. После второго воспроизведения кнопка плеера заблокируется.</span></div>' +
-      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">⏭️</span><span>Кнопка <strong>«Далее»</strong> становится активной только после того, как вы прослушали запись и выставили оценку.</span></div>' +
-      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">💬</span><span>Для некоторых записей появится <strong>дополнительный вопрос</strong> — отвечайте по первому впечатлению.</span></div>' +
-      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">🔄</span><span>Не обновляйте страницу — прогресс не сохраняется между сессиями.</span></div>' +
+      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">🎧</span>' +
+      '<span>Каждую запись можно прослушать <strong>не более двух раз</strong>. После второго воспроизведения кнопка плеера заблокируется.</span></div>' +
+      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">⏭️</span>' +
+      '<span>Кнопка <strong>«Далее»</strong> становится активной только после того, как вы прослушали запись и выставили оценку.</span></div>' +
+      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">💬</span>' +
+      '<span>Для некоторых коротких записей появится дополнительный вопрос о контексте — отвечайте по первому впечатлению.</span></div>' +
+      '<div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:1.3rem">🔄</span>' +
+      '<span>Не обновляйте страницу — прогресс не сохраняется между сессиями.</span></div>' +
       '</div>',
     ],
     show_clickable_nav: true,
@@ -436,13 +530,14 @@ function startExperiment() {
     type: jsPsychHtmlButtonResponse,
     stimulus: '<div style="text-align:center;padding:20px 0">' +
       '<h2>Пробный блок</h2>' +
-      '<p>Перед началом основного теста вы прослушаете четыре записи в том же формате.</p>' +
-      '<p>Оценивайте так же, как будете оценивать в основном блоке — по первому впечатлению.</p>' +
+      '<p>Перед началом вы прослушаете четыре записи в том же формате.</p>' +
+      '<p>Оценивайте по первому впечатлению.</p>' +
       '</div>',
     choices: ['Начать →'],
   };
 
   var practiceTrials = PRACTICE_STIMULI.map(function(stim, idx) {
+    var aId = 'audio-pr-' + idx;
     return {
       type: jsPsychHtmlButtonResponse,
       stimulus: function() {
@@ -451,12 +546,12 @@ function startExperiment() {
           'display:flex;align-items:center;gap:12px">' +
           '<span style="font-family:var(--mono);font-size:.8rem;color:var(--accent);white-space:nowrap">' + stim.label + '</span>' +
           '<div style="flex:1;display:flex;flex-direction:column;gap:4px">' +
-          '<audio id="audio-practice-' + idx + '" controls style="width:100%;height:34px"></audio>' +
-          '<span class="audio-loading" id="loading-hint-audio-practice-' + idx + '">Загрузка аудио...</span>' +
+          '<audio id="' + aId + '" controls style="width:100%;height:34px"></audio>' +
+          '<span class="audio-loading" id="loading-hint-' + aId + '">Загрузка аудио...</span>' +
           '</div></div>' +
-          makeMosHTML('practice_mos_' + idx) +
-          '<p style="font-size:.82rem;color:var(--muted);text-align:center" id="practice-hint-' + idx + '">' +
-          'Прослушайте запись перед оценкой. Доступно прослушиваний: <strong id="practice-count-' + idx + '">2</strong></p>';
+          makeMosHTML('pr_mos_' + idx) +
+          '<p style="font-size:.82rem;color:var(--muted);text-align:center" id="pr-hint-' + idx + '">' +
+          'Прослушайте запись перед оценкой. Доступно: <strong id="pr-count-' + idx + '">2</strong></p>';
       },
       choices: ['Далее →'],
       on_load: function() {
@@ -465,18 +560,17 @@ function startExperiment() {
         var played = false, rated = false;
         function tryUnlock() { if (played && rated) unlock(); }
 
-        setupAudioWithCounter(
-          stim.fileId, 'audio-practice-' + idx,
-          'practice-count-' + idx, 'practice-hint-' + idx,
-          function() { played = true; tryUnlock(); }
-        );
+        setupAudio(stim.fileId, aId, 'pr-count-' + idx, 'pr-hint-' + idx,
+          function() { played = true; tryUnlock(); });
 
-        document.querySelectorAll('input[name="practice_mos_' + idx + '"]').forEach(function(r) {
+        bindMosHint('pr_mos_' + idx);
+
+        document.querySelectorAll('input[name="pr_mos_' + idx + '"]').forEach(function(r) {
           r.addEventListener('change', function() { rated = true; tryUnlock(); });
         });
       },
       on_finish: function(data) {
-        var sel = document.querySelector('input[name="practice_mos_' + idx + '"]:checked');
+        var sel = document.querySelector('input[name="pr_mos_' + idx + '"]:checked');
         data.practice_mos   = sel ? parseInt(sel.value) : null;
         data.is_practice    = true;
         data.anchor_quality = stim.quality;
@@ -486,59 +580,86 @@ function startExperiment() {
 
   var trialPracticeDone = {
     type: jsPsychHtmlButtonResponse,
-    stimulus: '<div style="text-align:center;padding:30px 0"><h2>Можно начинать</h2>' +
+    stimulus: '<div style="text-align:center;padding:30px 0">' +
+      '<h2>Можно начинать</h2>' +
       '<p>Нажмите кнопку, чтобы перейти к основной части.</p></div>',
     choices: ['Продолжить →'],
   };
 
-  // ── Основной блок MOS ──────────────────────────────────────────
-  var mainTrials = SESSION.stimuli.map(function(stim, idx) {    var fileId      = extractFileId(stim.url);
-    var isDialogue  = stim.block === 'dialogue';
-    var audioId     = 'audio-main-' + idx;
-    var total       = SESSION.stimuli.length;
+  // ── Основной блок ──────────────────────────────────────────────
+  var mainTrials = SESSION.stimuli.map(function(stim, idx) {
+    var fileId     = extractFileId(stim.url);
+    var isDialogue = stim.block === 'dialogue';
+    var aId        = 'audio-main-' + idx;
+    var total      = SESSION.stimuli.length;
+    var mosName    = 'mos_' + idx;
 
     return {
       type: jsPsychHtmlButtonResponse,
       stimulus: function() {
+        // Плеер
         var html = '<div style="background:var(--acc-l);border:1px solid var(--border);' +
-          'border-radius:var(--r);padding:14px 18px;margin-bottom:20px;' +
+          'border-radius:var(--r);padding:14px 18px;margin-bottom:' + (isDialogue ? '10px' : '20px') + ';' +
           'display:flex;align-items:center;gap:12px">' +
           '<span style="font-family:var(--mono);font-size:.78rem;color:var(--accent);white-space:nowrap">' +
           (idx + 1) + ' / ' + total + '</span>' +
           '<div style="flex:1;display:flex;flex-direction:column;gap:4px">' +
-          '<audio id="' + audioId + '" controls style="width:100%;height:34px"></audio>' +
-          '<span class="audio-loading" id="loading-hint-' + audioId + '">Загрузка аудио...</span>' +
+          '<audio id="' + aId + '" controls style="width:100%;height:34px"></audio>' +
+          '<span class="audio-loading" id="loading-hint-' + aId + '">Загрузка аудио...</span>' +
           '</div></div>';
 
-        html += makeMosHTML('mos_' + idx);
+        // Текст реплики для диалоговых
+        if (isDialogue && stim.text) {
+          html += '<div class="replica-text">' + stim.text + '</div>';
+        }
 
-        html += '<div class="diag-block" id="diag-block-' + idx + '">' +
+        // MOS шкала
+        html += makeMosHTML(mosName);
+
+        // Диагностика (показывается при MOS ≤ 3)
+        html += '<div class="diag-block" id="diag-' + idx + '">' +
           '<p>Что именно звучит неестественно? (можно выбрать несколько)</p>' +
-          [['Неправильное ударение в словах','ударение'],
-           ['Неестественный или неприятный тембр голоса','тембр'],
-           ['Резкие скачки или перепады голоса','скачки'],
-           ['Носовой / гнусавый оттенок','носовой'],
-           ['Нечёткое или смазанное произношение звуков','произношение'],
-           ['Неподходящая интонация','интонация'],
-           ['Посторонние шумы или артефакты записи','шумы']].map(function(pair) {
-            return '<label class="diag-option"><input type="checkbox" name="diag_' + idx + '" value="' + pair[1] + '">' + pair[0] + '</label>';
+          [
+            ['Неправильное ударение в словах',           'ударение'],
+            ['Неправильные звуки в словах',              'звуки'],
+            ['Неестественный или неприятный тембр',      'тембр'],
+            ['Роботизированность, отсутствие эмоций',    'роботизированность'],
+            ['Неестественные паузы',                     'паузы'],
+            ['Резкие скачки интонации',                  'скачки'],
+            ['Неподходящая интонация',                   'интонация'],
+            ['Посторонние шумы или помехи в записи',     'шумы'],
+          ].map(function(pair) {
+            return '<label class="diag-option">' +
+              '<input type="checkbox" name="diag_' + idx + '" value="' + pair[1] + '">' +
+              pair[0] + '</label>';
           }).join('') +
-          '<label class="diag-option"><input type="checkbox" name="diag_' + idx + '" value="другое" id="diag-other-cb-' + idx + '">Другое</label>' +
+          '<label class="diag-option">' +
+          '<input type="checkbox" name="diag_' + idx + '" value="другое" id="diag-other-cb-' + idx + '">' +
+          'Другое</label>' +
           '<input type="text" class="diag-other" id="diag-other-text-' + idx + '" placeholder="Опишите кратко...">' +
           '</div>';
 
+        // Контекст для диалоговых реплик
         if (isDialogue) {
-          html += '<div class="functype-block">' +
-            '<p>Какой тип высказывания вы услышали?</p>' +
-            [['Вопрос','question'],['Краткий ответ','short_answer'],
-             ['Побуждение / просьба','imperative'],['Эмоциональная реплика','emotional'],
-             ['Дискурсивный маркер','discourse'],['Затрудняюсь определить','unknown']].map(function(pair) {
-              return '<label class="functype-option"><input type="radio" name="functype_' + idx + '" value="' + pair[1] + '">' + pair[0] + '</label>';
+          html += '<div class="context-block">' +
+            '<p>Где вы могли бы услышать эту фразу?</p>' +
+            [
+              ['В ответ на вопрос или реплику собеседника',         'answer'],
+              ['Чтобы спросить о чём-то',                           'question'],
+              ['Чтобы попросить или подтолкнуть к действию',        'imperative'],
+              ['Выражая удивление, радость или недовольство',        'emotional'],
+              ['Как утверждение или согласие',                       'statement'],
+              ['Как связку в разговоре («ну», «значит», «в общем»)', 'discourse'],
+              ['Затрудняюсь определить',                             'unknown'],
+            ].map(function(pair) {
+              return '<label class="context-option">' +
+                '<input type="radio" name="ctx_' + idx + '" value="' + pair[1] + '">' +
+                pair[0] + '</label>';
             }).join('') + '</div>';
         }
 
-        html += '<p style="font-size:.82rem;color:var(--muted);text-align:center" id="main-hint-' + idx + '">' +
-          'Прослушайте запись перед оценкой. Доступно прослушиваний: <strong id="main-count-' + idx + '">2</strong></p>';
+        html += '<p style="font-size:.82rem;color:var(--muted);text-align:center;margin-top:12px" id="main-hint-' + idx + '">' +
+          'Прослушайте запись перед оценкой. Доступно: <strong id="main-count-' + idx + '">2</strong></p>';
 
         return html;
       },
@@ -550,30 +671,29 @@ function startExperiment() {
         var unlock      = setupButton(btn);
         var played      = false;
         var rated       = false;
-        var hasFunctype = !isDialogue;
+        var hasCtx      = !isDialogue;
 
-        var currentMos      = null;
-        var currentDiag     = [];
-        var currentFunctype = null;
+        var curMos  = null;
+        var curDiag = [];
+        var curCtx  = null;
 
-        function tryUnlock() { if (played && rated && hasFunctype) unlock(); }
+        function tryUnlock() { if (played && rated && hasCtx) unlock(); }
 
-        setupAudioWithCounter(
-          fileId, audioId,
-          'main-count-' + idx, 'main-hint-' + idx,
-          function() { played = true; tryUnlock(); }
-        );
+        setupAudio(fileId, aId, 'main-count-' + idx, 'main-hint-' + idx,
+          function() { played = true; tryUnlock(); });
 
-        document.querySelectorAll('input[name="mos_' + idx + '"]').forEach(function(r) {
+        bindMosHint(mosName);
+
+        document.querySelectorAll('input[name="' + mosName + '"]').forEach(function(r) {
           r.addEventListener('change', function() {
-            currentMos = parseInt(this.value);
-            rated = true;
-            var diagBlock = document.getElementById('diag-block-' + idx);
-            if (currentMos <= 3) {
+            curMos = parseInt(this.value);
+            rated  = true;
+            var diagBlock = document.getElementById('diag-' + idx);
+            if (curMos <= 3) {
               diagBlock.classList.add('visible');
             } else {
               diagBlock.classList.remove('visible');
-              currentDiag = [];
+              curDiag = [];
             }
             tryUnlock();
           });
@@ -581,9 +701,9 @@ function startExperiment() {
 
         document.querySelectorAll('[name="diag_' + idx + '"]').forEach(function(cb) {
           cb.addEventListener('change', function() {
-            currentDiag = [];
+            curDiag = [];
             document.querySelectorAll('input[name="diag_' + idx + '"]:checked').forEach(function(c) {
-              currentDiag.push(c.value);
+              curDiag.push(c.value);
             });
           });
         });
@@ -597,33 +717,33 @@ function startExperiment() {
         }
 
         if (isDialogue) {
-          document.querySelectorAll('input[name="functype_' + idx + '"]').forEach(function(r) {
+          document.querySelectorAll('input[name="ctx_' + idx + '"]').forEach(function(r) {
             r.addEventListener('change', function() {
-              currentFunctype = this.value;
-              hasFunctype = true;
+              curCtx = this.value;
+              hasCtx = true;
               tryUnlock();
             });
           });
         }
 
-        SESSION['_trial_' + idx] = {
-          getMos:      function() { return currentMos; },
-          getDiag:     function() {
-            var d = currentDiag.slice();
+        SESSION['_t' + idx] = {
+          getMos:  function() { return curMos; },
+          getDiag: function() {
+            var d = curDiag.slice();
             if (otherTxt && otherTxt.value.trim() && otherCb && otherCb.checked) {
               d.push('другое: ' + otherTxt.value.trim());
             }
             return d;
           },
-          getFunctype: function() { return currentFunctype; },
+          getCtx: function() { return curCtx; },
         };
       },
 
       on_finish: function() {
-        var saved          = SESSION['_trial_' + idx];
-        var mosScore       = saved ? saved.getMos()      : null;
-        var diagnostics    = saved ? saved.getDiag()     : [];
-        var functypeAnswer = saved ? saved.getFunctype() : null;
+        var t   = SESSION['_t' + idx];
+        var mos = t ? t.getMos()  : null;
+        var dg  = t ? t.getDiag() : [];
+        var ctx = t ? t.getCtx()  : null;
 
         SESSION.responses.push({
           participant_id:   SESSION.participant_id,
@@ -634,14 +754,12 @@ function startExperiment() {
           text_id:          stim.text_id,
           system:           stim.system,
           order:            stim.order,
-          mos_score:        mosScore,
-          diagnostics:      diagnostics,
-          func_type_answer: functypeAnswer,
-          is_anchor:        false,
-          anchor_type:      '',
+          mos_score:        mos,
+          diagnostics:      dg,
+          context_answer:   ctx,
         });
 
-        delete SESSION['_trial_' + idx];
+        delete SESSION['_t' + idx];
       },
     };
   });
@@ -651,18 +769,21 @@ function startExperiment() {
     type: jsPsychHtmlButtonResponse,
     stimulus: '<div style="text-align:center;padding:40px 0">' +
       '<h2>Спасибо за участие!</h2>' +
-      '<p>Ваши ответы записаны. Страницу можно закрыть.</p>' +
-      '<p style="color:var(--muted);font-size:.9rem;margin-top:16px">Исследование проводит кафедра фонетики СПбГУ.</p>' +
+      '<p>Ваши ответы сохранены. Страницу можно закрыть.</p>' +
       '</div>',
     choices: [],
-    on_load: async function() {
-      await sendResults();
-    },
+    on_load: async function() { await sendResults(); },
   };
 
   // ── Запуск ─────────────────────────────────────────────────────
+  function isDisqualified() {
+    var s = SESSION.screening;
+    return s.native  === 'no'  ||
+           s.hearing === 'yes' ||
+           parseInt(s.age) < 18;
+  }
+
   if (DEBUG) {
-    // В тестовом режиме сразу к основному блоку
     jsPsych.run(mainTrials.concat([trialGoodbye]));
   } else {
     jsPsych.run([
@@ -670,10 +791,7 @@ function startExperiment() {
       trialScreening,
       {
         timeline: [trialDisqualified],
-        conditional_function: function() {
-          return SESSION.screening.native  === 'no' ||
-                 SESSION.screening.hearing === 'yes';
-        },
+        conditional_function: isDisqualified,
       },
       {
         timeline: [trialInstructions, trialPracticeIntro]
@@ -681,10 +799,7 @@ function startExperiment() {
           .concat([trialPracticeDone])
           .concat(mainTrials)
           .concat([trialGoodbye]),
-        conditional_function: function() {
-          return SESSION.screening.native  === 'yes' &&
-                 SESSION.screening.hearing === 'no';
-        },
+        conditional_function: function() { return !isDisqualified(); },
       },
     ]);
   }
