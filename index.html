@@ -320,6 +320,7 @@ function startExperiment() {
     var countEl = document.getElementById(countId);
     var hintEl  = document.getElementById(hintId);
     var left    = 2;
+
     loadAudio(fileId, audioId).then(function() {
       var el = document.getElementById(audioId);
       if (!el) return;
@@ -334,7 +335,19 @@ function startExperiment() {
           if (onPlayed) onPlayed();
         }
       });
+    }).catch(function() {
+      // Ошибка загрузки — показываем кнопку пропуска
+      if (hintEl) {
+        hintEl.innerHTML = 'Не удалось загрузить аудио. ' +
+          '<button onclick="document.querySelector(\'.jspsych-btn\').disabled=false;' +
+          'document.querySelector(\'.jspsych-btn\').style.opacity=\'1\';' +
+          'document.querySelector(\'.jspsych-btn\').style.cursor=\'pointer\';" ' +
+          'style="font-family:var(--mono);font-size:.82rem;color:var(--accent);' +
+          'background:none;border:none;cursor:pointer;text-decoration:underline;padding:0">' +
+          'Пропустить запись</button>';
+      }
     });
+  });
   }
 
   function makeMosHTML(name) {
